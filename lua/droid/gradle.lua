@@ -34,7 +34,6 @@ local function find_gradlew()
     return nil
 end
 
-
 local function run_gradle_task(cwd, gradlew, task, args)
     local cmd_args = vim.iter({ task, args or {} }):flatten():totable()
     local cmd = gradlew .. " " .. table.concat(cmd_args, " ")
@@ -47,7 +46,7 @@ local function run_gradle_task(cwd, gradlew, task, args)
             vim.api.nvim_set_current_win(M.term_win)
         else
             -- Window closed, create new one with existing buffer
-            vim.cmd("botright split | resize 15")
+            vim.cmd "botright split | resize 15"
             M.term_win = vim.api.nvim_get_current_win()
             vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
         end
@@ -76,7 +75,7 @@ local function run_gradle_task(cwd, gradlew, task, args)
         buffer = M.term_buf,
         once = true,
         callback = function()
-            vim.cmd("stopinsert")
+            vim.cmd "stopinsert"
             vim.notify("Gradle task completed - you can now scroll the output", vim.log.levels.INFO)
         end,
     })
@@ -91,11 +90,11 @@ function M.show_log()
             vim.api.nvim_set_current_win(M.term_win)
         else
             -- Window was closed, reopen it
-            vim.cmd("botright split | resize 15")
+            vim.cmd "botright split | resize 15"
             M.term_win = vim.api.nvim_get_current_win()
             vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
         end
-        vim.cmd("normal! G")
+        vim.cmd "normal! G"
     else
         vim.notify("No gradle terminal buffer available. Run a gradle command first.", vim.log.levels.WARN)
     end
@@ -135,7 +134,7 @@ function M.install_debug(callback)
         return
     end
 
-    vim.notify("Installing debug APK...", vim.log.levels.INFO)
+    vim.notify("Installing debug APK", vim.log.levels.INFO)
 
     -- Use silent terminal for install (no window, just job control)
     M.job_id = vim.fn.jobstart({ g.gradlew, "installDebug" }, {

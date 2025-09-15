@@ -103,10 +103,10 @@ function M.setup_commands()
                 vim.notify("Installing on " .. target.name, vim.log.levels.INFO)
                 gradle.install_debug()
             elseif target.type == "avd" then
-                vim.notify("Starting emulator first...", vim.log.levels.INFO)
+                vim.notify("Starting emulator", vim.log.levels.INFO)
                 android.start_emulator(emulator, target.avd)
                 android.wait_for_device_id(adb, function(device_id)
-                    vim.notify("Installing on emulator...", vim.log.levels.INFO)
+                    vim.notify("Installing on emulator", vim.log.levels.INFO)
                     gradle.install_debug()
                 end)
             end
@@ -146,6 +146,18 @@ function M.setup_commands()
 
     vim.api.nvim_create_user_command("DroidGradleStop", function()
         gradle.stop()
+    end, {})
+
+    vim.api.nvim_create_user_command("DroidEmulator", function()
+        android.launch_emulator()
+    end, {})
+
+    vim.api.nvim_create_user_command("DroidEmulatorStop", function()
+        android.stop_emulator()
+    end, {})
+
+    vim.api.nvim_create_user_command("DroidEmulatorWipeData", function()
+        android.wipe_emulator_data()
     end, {})
 end
 

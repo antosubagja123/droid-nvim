@@ -43,5 +43,8 @@ M.gradle_run = function()
 end
 M.gradle_task = gradle.task
 M.show_gradle_log = gradle.show_log
+M.launch_emulator = android.launch_emulator
+M.stop_emulator = android.stop_emulator
+M.wipe_emulator_data = android.wipe_emulator_data
 
 return M
