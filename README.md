@@ -41,7 +41,7 @@ _Build, run, and debug Android apps without leaving your editor_
 
 ```lua
 {
-  "rizuki/droid-nvim",
+  "rizukirr/droid-nvim",
   config = function()
       require("droid").setup({
           -- Optional configuration
@@ -58,7 +58,7 @@ _Build, run, and debug Android apps without leaving your editor_
 
 ```lua
 use {
-  "rizuki/droid-nvim",
+  "rizukirr/droid-nvim",
   config = function()
       require("droid").setup({
           -- Optional configuration
