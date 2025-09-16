@@ -5,7 +5,12 @@ M.defaults = {
         window_type = "horizontal", -- "horizontal" | "vertical" | "float"
         height = 12,
         width = 80,
-        filters = {}, -- e.g., { tag = "MyApp", priority = "DEBUG" }
+        filters = {
+            package = "mine", -- "mine" (auto-detect project package), specific package, or "none"
+            log_level = "v", -- v, d, i, w, e, f (lowercase)
+            tag = nil, -- specific tag to filter, or nil for no tag filtering
+            grep_pattern = nil, -- regex pattern for content filtering, or nil
+        },
     },
     android = {
         auto_select_single_target = true, -- Auto-select if only one device/emulator
@@ -14,6 +19,7 @@ M.defaults = {
         emulator_path = nil, -- Custom emulator path override
         qt_qpa_platform = nil, -- Qt platform for emulator (e.g., "xcb" for Linux)
         device_wait_timeout_ms = 30000, -- Timeout for waiting for device (ms)
+        logcat_startup_delay_ms = 2000, -- Delay after app launch before starting logcat (ms)
     },
 }
 
@@ -25,11 +31,22 @@ function M.setup(opts)
     -- Handle legacy flat config for backward compatibility
     local config_to_merge = {}
     if opts.logcat_mode or opts.logcat_height or opts.logcat_width or opts.logcat_filters then
+        -- Handle legacy logcat_filters migration
+        local filters = {}
+        if opts.logcat_filters then
+            if opts.logcat_filters.tag then
+                filters.tag = opts.logcat_filters.tag
+            end
+            if opts.logcat_filters.priority then
+                filters.log_level = string.lower(opts.logcat_filters.priority)
+            end
+        end
+
         config_to_merge.logcat = {
             window_type = opts.logcat_mode,
             height = opts.logcat_height,
             width = opts.logcat_width,
-            filters = opts.logcat_filters,
+            filters = filters,
         }
     end
     if
@@ -39,6 +56,7 @@ function M.setup(opts)
         or opts.emulator_path
         or opts.qt_qpa_platform
         or opts.device_wait_timeout_ms
+        or opts.logcat_startup_delay_ms
     then
         config_to_merge.android = {
             auto_select_single_target = opts.auto_select_single_target,
@@ -47,6 +65,7 @@ function M.setup(opts)
             emulator_path = opts.emulator_path,
             qt_qpa_platform = opts.qt_qpa_platform,
             device_wait_timeout_ms = opts.device_wait_timeout_ms,
+            logcat_startup_delay_ms = opts.logcat_startup_delay_ms,
         }
     end
 
@@ -112,6 +131,7 @@ function M.get()
         flat_config.emulator_path = M.config.android.emulator_path
         flat_config.qt_qpa_platform = M.config.android.qt_qpa_platform
         flat_config.device_wait_timeout_ms = M.config.android.device_wait_timeout_ms
+        flat_config.logcat_startup_delay_ms = M.config.android.logcat_startup_delay_ms
     end
 
     return flat_config

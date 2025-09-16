@@ -61,12 +61,6 @@ function M.launch_app(adb, device_id, callback)
     android.launch_app_on_device(adb, device_id, callback)
 end
 
--- Opens logcat for device
--- Args: adb, device_id, mode (optional)
-function M.open_logcat(adb, device_id, mode)
-    logcat.open(adb, device_id, mode)
-end
-
 -- Complete build and run workflow (the core DroidRun functionality)
 -- This is the main workflow: select target -> install+launch -> logcat
 function M.build_and_run()
@@ -75,35 +69,48 @@ function M.build_and_run()
         return
     end
 
-    -- Start loading with simple progress (no step updates during execution)
-    local session_id = progress.start_loading {
-        command = "DroidRun",
-        priority = progress.PRIORITY.CRITICAL,
-        message = "Running build and install workflow",
-    }
-
-    if not session_id then
-        return -- Loading was queued or cancelled
-    end
-
     M.select_target(tools, function(target)
         if not target then
-            progress.stop_loading(session_id, false, "No target selected")
             return
+        end
+
+        -- Start loading after device selection
+        local session_id = progress.start_loading {
+            command = "DroidRun",
+            priority = progress.PRIORITY.CRITICAL,
+            message = "Running build and install workflow",
+        }
+
+        if not session_id then
+            return -- Loading was queued or cancelled
         end
 
         if target.type == "device" then
             M.install_and_launch(tools.adb, target.id, function()
-                M.open_logcat(tools.adb, target.id)
-                progress.stop_loading(session_id, true, "Build, install, and logcat completed successfully")
+                -- Add delay before starting logcat to let app fully start
+                local config = require "droid.config"
+                local cfg = config.get()
+                local delay_ms = cfg.logcat_startup_delay_ms or 2000
+
+                vim.defer_fn(function()
+                    logcat.apply_filters({}, tools.adb, target.id)
+                    progress.stop_loading(session_id, true, "Run application successful")
+                end, delay_ms)
             end)
         elseif target.type == "avd" then
             android.start_emulator(tools.emulator, target.avd)
             android.wait_for_device_id(tools.adb, function(device_id)
                 if device_id then
                     M.install_and_launch(tools.adb, device_id, function()
-                        M.open_logcat(tools.adb, device_id)
-                        progress.stop_loading(session_id, true, "Build, install, and logcat completed successfully")
+                        -- Add delay before starting logcat to let app fully start
+                        local config = require "droid.config"
+                        local cfg = config.get()
+                        local delay_ms = cfg.logcat_startup_delay_ms or 2000
+
+                        vim.defer_fn(function()
+                            logcat.apply_filters({}, tools.adb, device_id)
+                            progress.stop_loading(session_id, true, "Run application successful")
+                        end, delay_ms)
                     end)
                 else
                     progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
@@ -168,7 +175,7 @@ function M.logcat_only(mode)
 
     M.select_target(tools, function(target)
         if target.type == "device" then
-            M.open_logcat(tools.adb, target.id, mode)
+            logcat.apply_filters {}
         elseif target.type == "avd" then
             vim.notify("AVD must be started first before attaching logcat", vim.log.levels.WARN)
         end

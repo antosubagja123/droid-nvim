@@ -18,10 +18,10 @@ M.loading_queue = {}
 
 -- Priority levels (higher = more important)
 M.PRIORITY = {
-    LOW = 1,      -- DroidEmulatorWipeData
-    MEDIUM = 2,   -- DroidClean, DroidSync, DroidEmulator
-    HIGH = 3,     -- DroidBuildDebug, DroidTask
-    CRITICAL = 4  -- DroidRun, DroidInstall
+    LOW = 1, -- DroidEmulatorWipeData
+    MEDIUM = 2, -- DroidClean, DroidSync, DroidEmulator
+    HIGH = 3, -- DroidBuildDebug, DroidTask
+    CRITICAL = 4, -- DroidRun, DroidInstall
 }
 
 -- Start a spinner with optional message
@@ -115,7 +115,7 @@ function M.start_loading(options)
         priority = options.priority or M.PRIORITY.MEDIUM,
         message = options.message or "Loading...",
         type = options.type or "spinner", -- "spinner" | "workflow"
-        steps = options.steps
+        steps = options.steps,
     }
 
     -- Check for conflicts
@@ -189,18 +189,26 @@ function M._handle_conflict(new_session)
     elseif new_session.priority == current.priority then
         -- Same priority: queue
         M._queue_session(new_session)
-        vim.notify(string.format("%s queued (waiting for %s)", new_session.command, current.command), vim.log.levels.INFO)
+        vim.notify(
+            string.format("%s queued (waiting for %s)", new_session.command, current.command),
+            vim.log.levels.INFO
+        )
         return nil
     else
         -- Lower priority: reject
-        vim.notify(string.format("%s cancelled (%s is running)", new_session.command, current.command), vim.log.levels.WARN)
+        vim.notify(
+            string.format("%s cancelled (%s is running)", new_session.command, current.command),
+            vim.log.levels.WARN
+        )
         return nil
     end
 end
 
 function M._queue_session(session)
     table.insert(M.loading_queue, session)
-    table.sort(M.loading_queue, function(a, b) return a.priority > b.priority end)
+    table.sort(M.loading_queue, function(a, b)
+        return a.priority > b.priority
+    end)
 end
 
 function M._process_queue()

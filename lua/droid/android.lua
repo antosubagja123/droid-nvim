@@ -133,6 +133,26 @@ function M.get_project_package_name()
     return M.find_application_id()
 end
 
+function M.get_app_pid(adb, device_id, package_name, callback)
+    if not package_name or package_name == "" then
+        callback(nil)
+        return
+    end
+
+    local cmd = { adb, "-s", device_id, "shell", "pidof", package_name }
+    local result = vim.system(cmd, {}):wait()
+
+    if result.code == 0 and result.stdout then
+        local pid = vim.trim(result.stdout)
+        if pid ~= "" then
+            callback(pid)
+            return
+        end
+    end
+
+    callback(nil)
+end
+
 function M.build_emulator_command(emulator, args)
     local cfg = config.get()
     local full_args = { emulator, "-netdelay", "none", "-netspeed", "full" }
@@ -220,7 +240,7 @@ end
 function M.get_running_devices(adb, callback)
     if vim.fn.executable(adb) ~= 1 then
         vim.notify("ADB executable not found at " .. adb, vim.log.levels.ERROR)
-        callback({})
+        callback {}
         return
     end
 

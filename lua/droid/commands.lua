@@ -56,6 +56,55 @@ function M.setup_commands()
         logcat.stop()
     end, {})
 
+    vim.api.nvim_create_user_command("DroidLogcatToggleAutoScroll", function()
+        logcat.toggle_auto_scroll()
+    end, {})
+
+    vim.api.nvim_create_user_command("DroidLogcatFilter", function(opts)
+        local filters = {}
+
+        -- Parse key=value pairs from opts.fargs
+        for _, arg in ipairs(opts.fargs) do
+            local key, value = arg:match "([^=]+)=([^=]+)"
+            if key and value then
+                filters[key] = value
+            end
+        end
+
+        -- Apply filters
+        logcat.apply_filters(filters)
+    end, {
+        nargs = "*",
+        complete = function(arg_lead, cmd_line, cursor_pos)
+            local completions = {
+                "package=",
+                "package=mine",
+                "package=none",
+                "log_level=v",
+                "log_level=d",
+                "log_level=i",
+                "log_level=w",
+                "log_level=e",
+                "log_level=f",
+                "tag=",
+                "grep=",
+            }
+
+            -- Filter completions based on what user has typed
+            local filtered = {}
+            for _, comp in ipairs(completions) do
+                if comp:find(arg_lead, 1, true) == 1 then
+                    table.insert(filtered, comp)
+                end
+            end
+            return filtered
+        end,
+    })
+
+    vim.api.nvim_create_user_command("DroidLogcatFilterShow", function()
+        logcat.show_current_filters()
+    end, {})
+
     vim.api.nvim_create_user_command("DroidGradleLog", function()
         gradle.show_log()
     end, {})
