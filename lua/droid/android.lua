@@ -1,4 +1,5 @@
 local config = require "droid.config"
+local progress = require "droid.progress"
 
 local M = {}
 
@@ -11,12 +12,12 @@ function M.find_application_id()
         if gradle_path and vim.fn.filereadable(gradle_path) == 1 then
             local file = io.open(gradle_path, "r")
             if file then
-                local content = file:read("*all")
+                local content = file:read "*all"
                 file:close()
 
-                for line in content:gmatch("[^\r\n]+") do
-                    if line:find("applicationId") then
-                        local app_id = line:match('.*["\']([^"\']+)["\']')
+                for line in content:gmatch "[^\r\n]+" do
+                    if line:find "applicationId" then
+                        local app_id = line:match ".*[\"']([^\"']+)[\"']"
                         if app_id then
                             return app_id
                         end
@@ -30,14 +31,18 @@ end
 
 -- Find main activity using adb cmd (inspired by reference code)
 function M.find_main_activity(adb, device_id, application_id)
-    local obj = vim.system({adb, "-s", device_id, "shell", "cmd", "package", "resolve-activity", "--brief", application_id}, {}):wait()
+    local obj = vim.system(
+        { adb, "-s", device_id, "shell", "cmd", "package", "resolve-activity", "--brief", application_id },
+        {}
+    )
+        :wait()
     if obj.code ~= 0 then
         return nil
     end
 
     local result = nil
     local output = obj.stdout or ""
-    for line in output:gmatch("[^\r\n]+") do
+    for line in output:gmatch "[^\r\n]+" do
         line = vim.trim(line)
         if line ~= "" then
             result = line
@@ -54,7 +59,9 @@ function M.launch_app_on_device(adb, device_id, callback)
 
     if not application_id then
         vim.notify("Failed to find application ID from build.gradle", vim.log.levels.ERROR)
-        if callback then vim.schedule(callback) end
+        if callback then
+            vim.schedule(callback)
+        end
         return
     end
 
@@ -65,9 +72,16 @@ function M.launch_app_on_device(adb, device_id, callback)
         vim.notify("Failed to find main activity, trying monkey command...", vim.log.levels.WARN)
         -- Fallback to monkey command
         local launch_obj = vim.system({
-            adb, "-s", device_id, "shell", "monkey",
-            "-p", application_id,
-            "-c", "android.intent.category.LAUNCHER", "1"
+            adb,
+            "-s",
+            device_id,
+            "shell",
+            "monkey",
+            "-p",
+            application_id,
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
         }, {}):wait()
 
         if launch_obj.code == 0 then
@@ -76,16 +90,26 @@ function M.launch_app_on_device(adb, device_id, callback)
             vim.notify("Failed to launch app: " .. (launch_obj.stderr or "unknown error"), vim.log.levels.ERROR)
         end
 
-        if callback then vim.schedule(callback) end
+        if callback then
+            vim.schedule(callback)
+        end
         return
     end
 
     -- Launch with specific activity
     local launch_obj = vim.system({
-        adb, "-s", device_id, "shell", "am", "start",
-        "-a", "android.intent.action.MAIN",
-        "-c", "android.intent.category.LAUNCHER",
-        "-n", main_activity
+        adb,
+        "-s",
+        device_id,
+        "shell",
+        "am",
+        "start",
+        "-a",
+        "android.intent.action.MAIN",
+        "-c",
+        "android.intent.category.LAUNCHER",
+        "-n",
+        main_activity,
     }, {}):wait()
 
     if launch_obj.code == 0 then
@@ -94,7 +118,9 @@ function M.launch_app_on_device(adb, device_id, callback)
         vim.notify("Failed to launch app: " .. (launch_obj.stderr or "unknown error"), vim.log.levels.ERROR)
     end
 
-    if callback then vim.schedule(callback) end
+    if callback then
+        vim.schedule(callback)
+    end
 end
 
 -- Alias for backward compatibility
@@ -218,12 +244,17 @@ function M.wait_for_device_id(adb, callback)
     local cfg = config.get()
     local timer = vim.loop.new_timer()
     local start_time = vim.loop.now()
+
+    progress.update_spinner_message "Waiting for device to come online"
+
     timer:start(0, 2000, function()
         if vim.loop.now() - start_time > cfg.device_wait_timeout_ms then
             timer:stop()
             timer:close()
             vim.schedule(function()
+                progress.stop_spinner()
                 vim.notify("Timed out waiting for device", vim.log.levels.ERROR)
+                callback(nil)
             end)
             return
         end
@@ -232,6 +263,7 @@ function M.wait_for_device_id(adb, callback)
             timer:stop()
             timer:close()
             vim.schedule(function()
+                progress.update_spinner_message "Device ready"
                 callback(devices[1].id)
             end)
         end

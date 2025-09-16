@@ -1,4 +1,5 @@
 local config = require "droid.config"
+local progress = require "droid.progress"
 
 local M = {}
 
@@ -128,7 +129,6 @@ function M.task(task, args)
     end
 end
 
-
 -- Pure install function (no launching)
 function M.install_debug(callback)
     local g = find_gradlew()
@@ -136,13 +136,14 @@ function M.install_debug(callback)
         return
     end
 
-    vim.notify("Installing debug APK", vim.log.levels.INFO)
+    progress.start_spinner "Installing debug APK"
 
     -- Use silent terminal for install (no window, just job control)
     M.job_id = vim.fn.jobstart({ g.gradlew, "installDebug" }, {
         cwd = g.cwd,
         on_exit = function(_, code)
             M.job_id = nil
+            progress.stop_spinner()
 
             if code == 0 then
                 vim.notify("Debug APK installed successfully", vim.log.levels.INFO)

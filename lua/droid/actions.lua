@@ -5,6 +5,7 @@ local config = require "droid.config"
 local gradle = require "droid.gradle"
 local android = require "droid.android"
 local logcat = require "droid.logcat"
+local progress = require "droid.progress"
 
 local M = {}
 
@@ -74,18 +75,30 @@ function M.build_and_run()
         return
     end
 
+    progress.start_workflow(4) -- 4 steps: target selection, install, launch, logcat
+    progress.next_step "Selecting target device"
+
     M.select_target(tools, function(target)
         if target.type == "device" then
-            vim.notify("Installing on " .. target.name, vim.log.levels.INFO)
+            progress.next_step("Installing on " .. target.name)
             M.install_and_launch(tools.adb, target.id, function()
+                progress.next_step "Starting logcat"
                 M.open_logcat(tools.adb, target.id)
+                progress.complete_workflow "DroidRun completed successfully"
             end)
         elseif target.type == "avd" then
+            progress.next_step("Starting emulator", true) -- use spinner for emulator start
             android.start_emulator(tools.emulator, target.avd)
             android.wait_for_device_id(tools.adb, function(device_id)
-                M.install_and_launch(tools.adb, device_id, function()
-                    M.open_logcat(tools.adb, device_id)
-                end)
+                if device_id then
+                    M.install_and_launch(tools.adb, device_id, function()
+                        progress.next_step "Starting logcat"
+                        M.open_logcat(tools.adb, device_id)
+                        progress.complete_workflow "DroidRun completed successfully"
+                    end)
+                else
+                    progress.error_workflow "Failed to start emulator or device not ready"
+                end
             end)
         end
     end)
