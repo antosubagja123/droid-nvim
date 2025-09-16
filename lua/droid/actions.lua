@@ -75,19 +75,16 @@ function M.build_and_run()
         return
     end
 
-    -- Start loading with global management
+    -- Start loading with simple progress (no step updates during execution)
     local session_id = progress.start_loading {
         command = "DroidRun",
         priority = progress.PRIORITY.CRITICAL,
-        type = "workflow",
-        steps = 4,
+        message = "Running build and install workflow",
     }
 
     if not session_id then
         return -- Loading was queued or cancelled
     end
-
-    progress.next_step "Selecting target device"
 
     M.select_target(tools, function(target)
         if not target then
@@ -96,21 +93,17 @@ function M.build_and_run()
         end
 
         if target.type == "device" then
-            progress.next_step("Installing on " .. target.name)
             M.install_and_launch(tools.adb, target.id, function()
-                progress.next_step "Starting logcat"
                 M.open_logcat(tools.adb, target.id)
-                progress.stop_loading(session_id, true, "DroidRun completed successfully")
+                progress.stop_loading(session_id, true, "Build, install, and logcat completed successfully")
             end)
         elseif target.type == "avd" then
-            progress.next_step("Starting emulator", true) -- use spinner for emulator start
             android.start_emulator(tools.emulator, target.avd)
             android.wait_for_device_id(tools.adb, function(device_id)
                 if device_id then
                     M.install_and_launch(tools.adb, device_id, function()
-                        progress.next_step "Starting logcat"
                         M.open_logcat(tools.adb, device_id)
-                        progress.stop_loading(session_id, true, "DroidRun completed successfully")
+                        progress.stop_loading(session_id, true, "Build, install, and logcat completed successfully")
                     end)
                 else
                     progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")

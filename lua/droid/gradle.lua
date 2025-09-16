@@ -38,49 +38,16 @@ end
 local function run_gradle_task(cwd, gradlew, task, args, callback)
     local cmd_args = vim.iter({ task, args or {} }):flatten():totable()
     local cmd = gradlew .. " " .. table.concat(cmd_args, " ")
-    local job_id = nil
 
-    -- Reuse existing terminal buffer if valid
+    -- Create or reuse terminal buffer (clear and mark unmodified for reuse)
     if M.term_buf and vim.api.nvim_buf_is_valid(M.term_buf) then
-        -- Check if window still exists and is showing our buffer
-        if M.term_win and vim.api.nvim_win_is_valid(M.term_win) then
-            -- Focus existing window and clear it
-            vim.api.nvim_set_current_win(M.term_win)
-        else
-            -- Window closed, create new one with existing buffer
-            vim.cmd "botright split | resize 15"
-            M.term_win = vim.api.nvim_get_current_win()
-            vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
-        end
-
-        -- Start new terminal job in existing buffer
-        job_id = vim.fn.termopen(cmd, {
-            cwd = cwd,
-            on_exit = function(_, exit_code)
-                if callback then
-                    vim.schedule(function()
-                        callback(exit_code == 0, exit_code)
-                    end)
-                end
-            end,
-        })
+        -- Make buffer modifiable, clear content, and mark as unmodified
+        vim.bo[M.term_buf].modifiable = true
+        vim.api.nvim_buf_set_lines(M.term_buf, 0, -1, false, {})
+        vim.bo[M.term_buf].modified = false
     else
-        -- Create new terminal buffer and start job
-        vim.cmd "botright split | resize 15"
-        M.term_win = vim.api.nvim_get_current_win()
+        -- Create new terminal buffer
         M.term_buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
-
-        job_id = vim.fn.termopen(cmd, {
-            cwd = cwd,
-            on_exit = function(_, exit_code)
-                if callback then
-                    vim.schedule(function()
-                        callback(exit_code == 0, exit_code)
-                    end)
-                end
-            end,
-        })
 
         -- Handle buffer deletion
         vim.api.nvim_create_autocmd("BufDelete", {
@@ -93,17 +60,44 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
         })
     end
 
-    -- Auto-exit insert mode when terminal job ends
-    vim.api.nvim_create_autocmd("TermClose", {
-        buffer = M.term_buf,
-        once = true,
-        callback = function()
-            vim.cmd "stopinsert"
-            vim.notify("Gradle task completed - you can now scroll the output", vim.log.levels.INFO)
-        end,
-    })
+    -- Set the terminal job to run in the buffer (in background)
+    vim.api.nvim_buf_call(M.term_buf, function()
+        M.job_id = vim.fn.jobstart(cmd, {
+            term = true,
+            cwd = cwd,
+            on_exit = function(_, exit_code)
+                M.job_id = nil
 
-    vim.cmd "startinsert"
+                -- Show terminal window only on completion
+                vim.schedule(function()
+                    if not M.term_win or not vim.api.nvim_win_is_valid(M.term_win) then
+                        vim.cmd "botright split | resize 15"
+                        M.term_win = vim.api.nvim_get_current_win()
+                        vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
+                    else
+                        -- Focus existing window
+                        vim.api.nvim_set_current_win(M.term_win)
+                    end
+
+                    -- Configure window appearance (hide line numbers for cleaner output)
+                    vim.wo[M.term_win].number = false
+                    vim.wo[M.term_win].relativenumber = false
+                    vim.wo[M.term_win].signcolumn = "no"
+
+                    -- Scroll to bottom to show latest output
+                    vim.cmd "normal! G"
+
+                    -- Exit insert mode if we're in it
+                    vim.cmd "stopinsert"
+
+                    -- Run callback
+                    if callback then
+                        callback(exit_code == 0, exit_code)
+                    end
+                end)
+            end,
+        })
+    end)
 end
 
 function M.show_log()
