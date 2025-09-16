@@ -128,6 +128,8 @@ function M.task(task, args)
     end
 end
 
+
+-- Pure install function (no launching)
 function M.install_debug(callback)
     local g = find_gradlew()
     if not g then
@@ -153,6 +155,24 @@ function M.install_debug(callback)
             end
         end,
     })
+end
+
+-- Composite function: install + launch (moved to keep compatibility)
+function M.install_debug_and_launch(adb, device_id, callback)
+    local config = require "droid.config"
+    local cfg = config.get()
+
+    M.install_debug(function()
+        -- Launch app if auto_launch_app is enabled
+        if cfg.auto_launch_app then
+            local android = require "droid.android"
+            android.simple_launch_app(adb, device_id, callback)
+        else
+            if callback then
+                vim.schedule(callback)
+            end
+        end
+    end)
 end
 
 function M.stop()

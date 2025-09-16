@@ -2,179 +2,75 @@
 
 # 🤖 droid.nvim
 
-**The ultimate Android development companion for Neovim**
-
-_Build, run, and debug Android apps without leaving your editor_
+**Bring Android Studio experience to Neovim**
 
 [![Neovim](https://img.shields.io/badge/Neovim-0.10+-green.svg?style=flat-square&logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Made%20with-Lua-blue.svg?style=flat-square&logo=lua)](https://lua.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
----
-
-**droid.nvim** streamlines your Android development workflow with seamless Gradle, ADB, and emulator integration. Build, deploy, and monitor your apps directly from Neovim with real-time logcat output.
+Complete Android development workflow in Neovim - build, install, launch, and debug your apps with the same seamless experience as Android Studio.
 
 </div>
 
-| NOTE: This plugin under heavy maintenance, please expect broken changes
+> **⚠️ Development Status**
+> This project is under heavy maintenance. Expect breaking changes and frequent updates as we improve the codebase.
 
 ## ✨ Features
 
-- 🔧 **Gradle Integration** - Run common tasks like `sync`, `clean`, `assembleDebug`, and custom tasks with flexible output modes
-- 📱 **Device & Emulator Management** - Detect and select connected Android devices or emulators (AVDs) seamlessly
-- 📋 **Logcat Support** - View `logcat` output in horizontal, vertical, or floating windows with filtering capabilities
-- 🔍 **Automatic SDK Detection** - Smart detection using environment variables, global settings, or platform defaults
-- ⚡ **Intuitive Commands** - Simple commands like `:DroidRun`, `:DroidBuildDebug`, `:DroidLogcat` for common tasks
-- 🛡️ **Robust Error Handling** - Clear notifications for success, failure, and edge cases
-- ⚙️ **Highly Configurable** - Flexible options for logcat display, device selection, and executable paths
+- 🔧 **Gradle Integration** - Build, clean, sync, and run custom Gradle tasks
+- 📱 **Device Management** - Automatic device/emulator detection and selection
+- 📋 **Logcat Support** - Real-time logcat output in multiple window modes
+- 🚀 **Auto Launch** - Automatically launches apps after installation (like Android Studio)
+- ⚡ **Simple Commands** - Intuitive commands for common Android development tasks
+- ⚙️ **Configurable** - Flexible configuration for different development setups
 
 ## 📦 Installation
 
 ### Requirements
 
-- Neovim 0.10.0 or later
-- Android SDK with `adb` and `emulator` installed
-- Gradle (with `gradlew` in your project)
-- Optional: `vim.ui.select` support (e.g., via `telescope.nvim` for interactive selection)
+- Neovim 0.10.0+
+- Android SDK with `adb` and `emulator`
+- Android project with `gradlew`
 
-#### lazy.nvim
+### lazy.nvim
 
 ```lua
 {
   "rizukirr/droid-nvim",
   config = function()
-      require("droid").setup({
-          -- Optional configuration
-          logcat = {
-              window_type = "float",
-              height = 15,
-              width = 100,
-              filters = { tag = "MyApp", priority = "DEBUG" }
-          },
-          android = {
-              auto_select_single_target = true,
-          }
-      })
+      require("droid").setup()
   end,
 }
 ```
 
-#### packer.nvim
+### packer.nvim
 
 ```lua
 use {
   "rizukirr/droid-nvim",
   config = function()
-      require("droid").setup({
-          -- Optional configuration
-          logcat = {
-              window_type = "float",
-              height = 15,
-              width = 100,
-              filters = { tag = "MyApp", priority = "DEBUG" }
-          },
-          android = {
-              auto_select_single_target = true,
-          }
-      })
+      require("droid").setup()
   end,
 }
 ```
 
 ## ⚙️ Configuration
 
-The plugin can be configured by passing a table to `require("droid").setup()`. Configuration is organized into logical sections for better maintainability.
-
-### Default Configuration
+Optional configuration can be passed to `setup()`:
 
 ```lua
 require("droid").setup({
     logcat = {
         window_type = "horizontal", -- "horizontal" | "vertical" | "float"
-        height = 12,                -- Height for horizontal/float logcat
-        width = 80,                 -- Width for vertical/float logcat
-        filters = {},               -- e.g., { tag = "MyApp", priority = "DEBUG" }
+        height = 12,
+        width = 80,
     },
     android = {
-        auto_select_single_target = true,  -- Auto-select if only one device/emulator
-        adb_path = nil,                    -- Custom path to adb executable
-        emulator_path = nil,               -- Custom path to emulator executable
-        qt_qpa_platform = nil,             -- Qt platform for emulator (e.g., "xcb" for Linux)
-        device_wait_timeout_ms = 30000,    -- Timeout for device/emulator readiness (ms)
+        auto_select_single_target = true,
+        auto_launch_app = true,     -- Launch app after install
     },
 })
 ```
-
-### Configuration Examples
-
-#### Basic Float Setup
-
-```lua
-require("droid").setup({
-    logcat = {
-        window_type = "float",
-        height = 20,
-        width = 120,
-        filters = { tag = "MyApp", priority = "DEBUG" },
-    }
-})
-```
-
-#### Custom Paths and Qt Platform
-
-```lua
-require("droid").setup({
-    android = {
-        auto_select_single_target = false,
-        adb_path = "/custom/path/to/adb",
-        emulator_path = "/custom/path/to/emulator",
-        -- For Linux users with Qt platform issues:
-        qt_qpa_platform = "xcb",
-        device_wait_timeout_ms = 45000,
-    }
-})
-```
-
-#### Backward Compatibility
-
-The plugin still supports the legacy flat configuration for existing users:
-
-```lua
-require("droid").setup({
-    logcat_mode = "float",          -- Still works
-    logcat_height = 15,            -- Still works
-    auto_select_single_target = false, -- Still works
-    adb_path = "/custom/path/to/adb",  -- Still works
-})
-```
-
-### Configuration Options
-
-#### Logcat Section
-
-| Option        | Type     | Default        | Description                                                   |
-| ------------- | -------- | -------------- | ------------------------------------------------------------- |
-| `window_type` | `string` | `"horizontal"` | Window layout: `"horizontal"`, `"vertical"`, or `"float"`     |
-| `height`      | `number` | `12`           | Window height for horizontal and float modes                  |
-| `width`       | `number` | `80`           | Window width for vertical and float modes                     |
-| `filters`     | `table`  | `{}`           | Logcat filters, e.g., `{ tag = "MyApp", priority = "DEBUG" }` |
-
-#### Android Section
-
-| Option                      | Type      | Default | Description                                                    |
-| --------------------------- | --------- | ------- | -------------------------------------------------------------- |
-| `auto_select_single_target` | `boolean` | `true`  | Auto-select if only one device/emulator is available           |
-| `adb_path`                  | `string`  | `nil`   | Custom path to adb executable (overrides auto-detection)       |
-| `emulator_path`             | `string`  | `nil`   | Custom path to emulator executable (overrides auto-detection)  |
-| `qt_qpa_platform`           | `string`  | `nil`   | Qt platform for emulator (e.g., "xcb" for Linux compatibility) |
-| `device_wait_timeout_ms`    | `number`  | `30000` | Timeout when waiting for emulator to be ready (milliseconds)   |
-
-#### Qt Platform Configuration
-
-The `qt_qpa_platform` setting applies globally to all emulator operations (launch, stop, wipe data). This is useful for Linux systems that need specific Qt platform configurations (in case if you have issue with QT_QPA_PLATFORM when working with emulator like me).
-
-**Default Emulator Behavior:**
-By default, the plugin uses Android Studio's performance optimizations: `-netdelay none -netspeed full` for all emulator operations.
 
 ## 🚀 Usage
 
@@ -282,3 +178,9 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 ## 📄 License
 
 MIT License
+
+---
+
+<div align="center">
+<sub>If this plugin helps your workflow, consider <a href="https://ko-fi.com/rizukirr">buying me a coffee</a> ☕</sub>
+</div>

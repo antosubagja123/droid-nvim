@@ -9,6 +9,7 @@ M.defaults = {
     },
     android = {
         auto_select_single_target = true, -- Auto-select if only one device/emulator
+        auto_launch_app = true, -- Auto-launch app after successful installation
         adb_path = nil, -- Custom ADB path override
         emulator_path = nil, -- Custom emulator path override
         qt_qpa_platform = nil, -- Qt platform for emulator (e.g., "xcb" for Linux)
@@ -31,9 +32,17 @@ function M.setup(opts)
             filters = opts.logcat_filters,
         }
     end
-    if opts.auto_select_single_target or opts.adb_path or opts.emulator_path or opts.qt_qpa_platform or opts.device_wait_timeout_ms then
+    if
+        opts.auto_select_single_target
+        or opts.auto_launch_app
+        or opts.adb_path
+        or opts.emulator_path
+        or opts.qt_qpa_platform
+        or opts.device_wait_timeout_ms
+    then
         config_to_merge.android = {
             auto_select_single_target = opts.auto_select_single_target,
+            auto_launch_app = opts.auto_launch_app,
             adb_path = opts.adb_path,
             emulator_path = opts.emulator_path,
             qt_qpa_platform = opts.qt_qpa_platform,
@@ -51,18 +60,31 @@ function M.setup(opts)
 
     -- Validate logcat window_type
     local valid_modes = { horizontal = true, vertical = true, float = true }
-    if config_to_merge.logcat and config_to_merge.logcat.window_type and not valid_modes[config_to_merge.logcat.window_type] then
-        vim.notify("Invalid logcat window_type: " .. config_to_merge.logcat.window_type .. ". Using default: horizontal", vim.log.levels.WARN)
+    if
+        config_to_merge.logcat
+        and config_to_merge.logcat.window_type
+        and not valid_modes[config_to_merge.logcat.window_type]
+    then
+        vim.notify(
+            "Invalid logcat window_type: " .. config_to_merge.logcat.window_type .. ". Using default: horizontal",
+            vim.log.levels.WARN
+        )
         config_to_merge.logcat.window_type = "horizontal"
     end
 
     -- Validate dimensions
     if config_to_merge.logcat then
-        if config_to_merge.logcat.height and (type(config_to_merge.logcat.height) ~= "number" or config_to_merge.logcat.height <= 0) then
+        if
+            config_to_merge.logcat.height
+            and (type(config_to_merge.logcat.height) ~= "number" or config_to_merge.logcat.height <= 0)
+        then
             vim.notify("Invalid logcat height. Using default: 12", vim.log.levels.WARN)
             config_to_merge.logcat.height = 12
         end
-        if config_to_merge.logcat.width and (type(config_to_merge.logcat.width) ~= "number" or config_to_merge.logcat.width <= 0) then
+        if
+            config_to_merge.logcat.width
+            and (type(config_to_merge.logcat.width) ~= "number" or config_to_merge.logcat.width <= 0)
+        then
             vim.notify("Invalid logcat width. Using default: 80", vim.log.levels.WARN)
             config_to_merge.logcat.width = 80
         end
@@ -85,6 +107,7 @@ function M.get()
 
     if M.config.android then
         flat_config.auto_select_single_target = M.config.android.auto_select_single_target
+        flat_config.auto_launch_app = M.config.android.auto_launch_app
         flat_config.adb_path = M.config.android.adb_path
         flat_config.emulator_path = M.config.android.emulator_path
         flat_config.qt_qpa_platform = M.config.android.qt_qpa_platform

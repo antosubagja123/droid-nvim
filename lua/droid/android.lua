@@ -2,6 +2,111 @@ local config = require "droid.config"
 
 local M = {}
 
+-- Simple function to find application ID from build.gradle (inspired by reference code)
+function M.find_application_id()
+    local gradle_candidates = { "app/build.gradle", "app/build.gradle.kts" }
+
+    for _, candidate in ipairs(gradle_candidates) do
+        local gradle_path = vim.fs.find(candidate, { upward = true })[1]
+        if gradle_path and vim.fn.filereadable(gradle_path) == 1 then
+            local file = io.open(gradle_path, "r")
+            if file then
+                local content = file:read("*all")
+                file:close()
+
+                for line in content:gmatch("[^\r\n]+") do
+                    if line:find("applicationId") then
+                        local app_id = line:match('.*["\']([^"\']+)["\']')
+                        if app_id then
+                            return app_id
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Find main activity using adb cmd (inspired by reference code)
+function M.find_main_activity(adb, device_id, application_id)
+    local obj = vim.system({adb, "-s", device_id, "shell", "cmd", "package", "resolve-activity", "--brief", application_id}, {}):wait()
+    if obj.code ~= 0 then
+        return nil
+    end
+
+    local result = nil
+    local output = obj.stdout or ""
+    for line in output:gmatch("[^\r\n]+") do
+        line = vim.trim(line)
+        if line ~= "" then
+            result = line
+        end
+    end
+
+    return result
+end
+
+-- Launch app on device (standalone function)
+-- Args: adb, device_id, callback (optional)
+function M.launch_app_on_device(adb, device_id, callback)
+    local application_id = M.find_application_id()
+
+    if not application_id then
+        vim.notify("Failed to find application ID from build.gradle", vim.log.levels.ERROR)
+        if callback then vim.schedule(callback) end
+        return
+    end
+
+    vim.notify("Launching " .. application_id .. "...", vim.log.levels.INFO)
+
+    local main_activity = M.find_main_activity(adb, device_id, application_id)
+    if not main_activity then
+        vim.notify("Failed to find main activity, trying monkey command...", vim.log.levels.WARN)
+        -- Fallback to monkey command
+        local launch_obj = vim.system({
+            adb, "-s", device_id, "shell", "monkey",
+            "-p", application_id,
+            "-c", "android.intent.category.LAUNCHER", "1"
+        }, {}):wait()
+
+        if launch_obj.code == 0 then
+            vim.notify("App launched successfully (via monkey)!", vim.log.levels.INFO)
+        else
+            vim.notify("Failed to launch app: " .. (launch_obj.stderr or "unknown error"), vim.log.levels.ERROR)
+        end
+
+        if callback then vim.schedule(callback) end
+        return
+    end
+
+    -- Launch with specific activity
+    local launch_obj = vim.system({
+        adb, "-s", device_id, "shell", "am", "start",
+        "-a", "android.intent.action.MAIN",
+        "-c", "android.intent.category.LAUNCHER",
+        "-n", main_activity
+    }, {}):wait()
+
+    if launch_obj.code == 0 then
+        vim.notify("App launched successfully!", vim.log.levels.INFO)
+    else
+        vim.notify("Failed to launch app: " .. (launch_obj.stderr or "unknown error"), vim.log.levels.ERROR)
+    end
+
+    if callback then vim.schedule(callback) end
+end
+
+-- Alias for backward compatibility
+function M.simple_launch_app(adb, device_id, callback)
+    return M.launch_app_on_device(adb, device_id, callback)
+end
+
+-- Get project package name (standalone utility)
+function M.get_project_package_name()
+    return M.find_application_id()
+end
+
 function M.build_emulator_command(emulator, args)
     local cfg = config.get()
     local full_args = { emulator, "-netdelay", "none", "-netspeed", "full" }
@@ -14,7 +119,7 @@ function M.build_emulator_command(emulator, args)
     -- If Qt platform is configured, use shell with environment variable
     if cfg.qt_qpa_platform then
         local cmd_str = "QT_QPA_PLATFORM=" .. cfg.qt_qpa_platform .. " " .. table.concat(full_args, " ")
-        return {"sh", "-c", cmd_str}, cmd_str
+        return { "sh", "-c", cmd_str }, cmd_str
     else
         return full_args, table.concat(full_args, " ")
     end
@@ -183,7 +288,7 @@ end
 function M.start_emulator(emulator, avd)
     vim.notify("Starting emulator " .. avd, vim.log.levels.INFO)
 
-    local cmd, cmd_str = M.build_emulator_command(emulator, {"-avd", avd})
+    local cmd, cmd_str = M.build_emulator_command(emulator, { "-avd", avd })
     return vim.fn.jobstart(cmd)
 end
 
@@ -228,7 +333,7 @@ function M.launch_emulator()
             local cfg = config.get()
             vim.notify("Launching Emulator: " .. choice, vim.log.levels.INFO)
 
-            local job_args, cmd_str = M.build_emulator_command(emulator, {"-avd", choice})
+            local job_args, cmd_str = M.build_emulator_command(emulator, { "-avd", choice })
 
             vim.fn.jobstart(job_args, {
                 on_exit = vim.schedule_wrap(function(_, exit_code)
@@ -253,7 +358,7 @@ function M.stop_emulator()
     local emulators = {}
 
     for _, device in ipairs(running_devices) do
-        if device.id:match("^emulator%-") then
+        if device.id:match "^emulator%-" then
             table.insert(emulators, { id = device.id, name = device.name })
         end
     end
@@ -271,7 +376,7 @@ function M.stop_emulator()
     }, function(choice)
         if choice then
             vim.notify("Stopping emulator: " .. choice.id, vim.log.levels.INFO)
-            vim.fn.jobstart({adb, "-s", choice.id, "emu", "kill"}, {
+            vim.fn.jobstart({ adb, "-s", choice.id, "emu", "kill" }, {
                 on_exit = vim.schedule_wrap(function(_, exit_code)
                     if exit_code == 0 then
                         vim.notify("Emulator stopped successfully: " .. choice.id, vim.log.levels.INFO)
@@ -313,9 +418,10 @@ function M.wipe_emulator_data()
             if adb then
                 local running_devices = M.get_running_devices(adb)
                 for _, device in ipairs(running_devices) do
-                    if device.id:match("^emulator%-") then
+                    if device.id:match "^emulator%-" then
                         -- Try to match by getting AVD name from running emulator
-                        local result = vim.fn.system({adb, "-s", device.id, "shell", "getprop", "ro.kernel.qemu.avd_name"})
+                        local result =
+                            vim.fn.system { adb, "-s", device.id, "shell", "getprop", "ro.kernel.qemu.avd_name" }
                         local avd_name = vim.trim(result)
                         if avd_name == choice then
                             is_running = true
@@ -333,7 +439,7 @@ function M.wipe_emulator_data()
                 }, function(input)
                     if input and (input:lower() == "y" or input:lower() == "yes") then
                         vim.notify("Stopping emulator before wipe...", vim.log.levels.INFO)
-                        vim.fn.jobstart({adb, "-s", running_emulator_id, "emu", "kill"}, {
+                        vim.fn.jobstart({ adb, "-s", running_emulator_id, "emu", "kill" }, {
                             on_exit = vim.schedule_wrap(function(_, exit_code)
                                 if exit_code == 0 then
                                     vim.notify("Emulator stopped, wiping data...", vim.log.levels.INFO)
@@ -371,7 +477,7 @@ end
 function M.start_wipe_data(emulator, avd)
     vim.notify("Wiping data for Emulator: " .. avd, vim.log.levels.INFO)
 
-    local cmd, cmd_str = M.build_emulator_command(emulator, {"-avd", avd, "-wipe-data"})
+    local cmd, cmd_str = M.build_emulator_command(emulator, { "-avd", avd, "-wipe-data" })
 
     vim.fn.jobstart(cmd, {
         on_exit = vim.schedule_wrap(function(_, exit_code)
@@ -381,6 +487,138 @@ function M.start_wipe_data(emulator, avd)
                 vim.notify("Failed to wipe Emulator data: " .. avd, vim.log.levels.ERROR)
             end
         end),
+    })
+end
+
+function M.extract_package_info()
+    -- Find AndroidManifest.xml in the project
+    local manifest_candidates = {
+        "app/src/main/AndroidManifest.xml",
+        "src/main/AndroidManifest.xml",
+        "AndroidManifest.xml",
+    }
+
+    local manifest_path = nil
+    for _, candidate in ipairs(manifest_candidates) do
+        local full_path = vim.fs.find(candidate, { upward = true })[1]
+        if full_path and vim.fn.filereadable(full_path) == 1 then
+            manifest_path = full_path
+            break
+        end
+    end
+
+    if not manifest_path then
+        vim.notify("AndroidManifest.xml not found in project", vim.log.levels.ERROR)
+        return nil
+    end
+
+    -- Read and parse AndroidManifest.xml
+    local manifest_content = table.concat(vim.fn.readfile(manifest_path), "\n")
+
+    -- Extract package name from manifest tag
+    local package_name = manifest_content:match '<manifest[^>]*package="([^"]*)"'
+    if not package_name then
+        vim.notify("Could not extract package name from AndroidManifest.xml", vim.log.levels.ERROR)
+        return nil
+    end
+
+    -- Extract main activity (look for LAUNCHER category)
+    local main_activity = nil
+
+    -- Pattern to find activity with LAUNCHER intent
+    for activity_block in manifest_content:gmatch "<activity[^>]*.-</activity>" do
+        if activity_block:find "android%.intent%.category%.LAUNCHER" then
+            -- Extract activity name
+            main_activity = activity_block:match '<activity[^>]*android:name="([^"]*)"'
+            if main_activity then
+                -- Handle relative activity names (starting with .)
+                if main_activity:sub(1, 1) == "." then
+                    main_activity = package_name .. main_activity
+                elseif not main_activity:find "%." then
+                    -- If no package specified, assume it's in the main package
+                    main_activity = package_name .. "." .. main_activity
+                end
+                break
+            end
+        end
+    end
+
+    if not main_activity then
+        vim.notify("Could not find main activity in AndroidManifest.xml", vim.log.levels.WARN)
+        return { package = package_name }
+    end
+
+    return {
+        package = package_name,
+        activity = main_activity,
+    }
+end
+
+function M.launch_app(adb, device_id, package_info, callback)
+    if not package_info or not package_info.package then
+        vim.notify("No package information available for app launch", vim.log.levels.ERROR)
+        if callback then
+            vim.schedule(callback)
+        end
+        return
+    end
+
+    local launch_cmd
+    if package_info.activity then
+        -- Use am start with specific activity
+        launch_cmd = {
+            adb,
+            "-s",
+            device_id,
+            "shell",
+            "am",
+            "start",
+            "-n",
+            package_info.package .. "/" .. package_info.activity,
+        }
+        vim.notify("Launching " .. package_info.package, vim.log.levels.INFO)
+    else
+        -- Fallback to monkey command with package name only
+        launch_cmd = {
+            adb,
+            "-s",
+            device_id,
+            "shell",
+            "monkey",
+            "-p",
+            package_info.package,
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "1",
+        }
+        vim.notify("Launching " .. package_info.package .. " (fallback method)", vim.log.levels.INFO)
+    end
+
+    vim.fn.jobstart(launch_cmd, {
+        on_exit = vim.schedule_wrap(function(_, exit_code)
+            if exit_code == 0 then
+                vim.notify("App launched successfully", vim.log.levels.INFO)
+            else
+                vim.notify("Failed to launch app (exit code: " .. exit_code .. ")", vim.log.levels.WARN)
+            end
+
+            if callback then
+                vim.schedule(callback)
+            end
+        end),
+        on_stderr = function(_, data)
+            -- Filter out common non-error messages
+            for _, line in ipairs(data) do
+                if line and #line > 0 and not line:match "^%s*$" then
+                    -- Only show stderr if it looks like a real error
+                    if line:lower():find "error" or line:lower():find "failed" then
+                        vim.schedule(function()
+                            vim.notify("App launch warning: " .. line, vim.log.levels.WARN)
+                        end)
+                    end
+                end
+            end
+        end,
     })
 end
 

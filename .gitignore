@@ -90,3 +90,5 @@ tmp/
 temp/
 CLAUDE.md
 .secret
+.claude/
+ARCHITECTURE.md

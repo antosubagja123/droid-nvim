@@ -60,8 +60,12 @@ end
 function M.open(adb, device_id, mode)
     local cfg = config.get()
 
-    -- Stop existing logcat if running
-    M.stop()
+    -- Stop existing logcat if running (silently)
+    if M.job_id then
+        vim.fn.jobstop(M.job_id)
+        M.job_id = nil
+        vim.notify("Logcat stopped", vim.log.levels.INFO)
+    end
 
     -- Create new buffer and window
     create_logcat_buffer()

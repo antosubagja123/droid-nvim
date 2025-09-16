@@ -2,40 +2,14 @@ local gradle = require "droid.gradle"
 local android = require "droid.android"
 local logcat = require "droid.logcat"
 local config = require "droid.config"
+local actions = require "droid.actions"
 
 local M = {}
-
-local function build_and_run()
-    local adb = android.get_adb_path()
-    local emulator = android.get_emulator_path()
-
-    if not adb or not emulator then
-        return
-    end
-
-    android.choose_target(adb, emulator, function(target)
-        if target.type == "device" then
-            vim.notify("Installing on " .. target.name, vim.log.levels.INFO)
-            gradle.install_debug(function()
-                logcat.open(adb, target.id)
-            end)
-        elseif target.type == "avd" then
-            android.start_emulator(emulator, target.avd)
-
-            -- Wait until device is ready and get its device ID
-            android.wait_for_device_id(adb, function(device_id)
-                gradle.install_debug(function()
-                    logcat.open(adb, device_id)
-                end)
-            end)
-        end
-    end)
-end
 
 function M.setup_commands()
     -- Composite command (does everything)
     vim.api.nvim_create_user_command("DroidRun", function()
-        build_and_run()
+        actions.build_and_run()
     end, {})
 
     -- Individual gradle commands
@@ -57,78 +31,20 @@ function M.setup_commands()
 
     -- Individual device management commands
     vim.api.nvim_create_user_command("DroidDevices", function()
-        local adb = android.get_adb_path()
-        local emulator = android.get_emulator_path()
-
-        if not adb or not emulator then
-            return
-        end
-
-        android.choose_target(adb, emulator, function(target)
-            if target.type == "device" then
-                vim.notify("Selected device: " .. target.name .. " (" .. target.id .. ")", vim.log.levels.INFO)
-            elseif target.type == "avd" then
-                vim.notify("Selected AVD: " .. target.name .. " (" .. target.avd .. ")", vim.log.levels.INFO)
-            end
-        end)
+        actions.show_devices()
     end, {})
 
     vim.api.nvim_create_user_command("DroidStartEmulator", function()
-        local adb = android.get_adb_path()
-        local emulator = android.get_emulator_path()
-
-        if not adb or not emulator then
-            return
-        end
-
-        android.choose_target(adb, emulator, function(target)
-            if target.type == "avd" then
-                android.start_emulator(emulator, target.avd)
-            else
-                vim.notify("Selected target is not an AVD", vim.log.levels.WARN)
-            end
-        end)
+        actions.start_emulator()
     end, {})
 
     vim.api.nvim_create_user_command("DroidInstall", function()
-        local adb = android.get_adb_path()
-        local emulator = android.get_emulator_path()
-
-        if not adb or not emulator then
-            return
-        end
-
-        android.choose_target(adb, emulator, function(target)
-            if target.type == "device" then
-                vim.notify("Installing on " .. target.name, vim.log.levels.INFO)
-                gradle.install_debug()
-            elseif target.type == "avd" then
-                vim.notify("Starting emulator", vim.log.levels.INFO)
-                android.start_emulator(emulator, target.avd)
-                android.wait_for_device_id(adb, function(device_id)
-                    vim.notify("Installing on emulator", vim.log.levels.INFO)
-                    gradle.install_debug()
-                end)
-            end
-        end)
+        actions.install_only()
     end, {})
 
     vim.api.nvim_create_user_command("DroidLogcat", function(opts)
-        local adb = android.get_adb_path()
-        local emulator = android.get_emulator_path()
-
-        if not adb or not emulator then
-            return
-        end
-
-        android.choose_target(adb, emulator, function(target)
-            if target.type == "device" then
-                local mode = opts.args ~= "" and opts.args or config.get().logcat_mode
-                logcat.open(adb, target.id, mode)
-            elseif target.type == "avd" then
-                vim.notify("AVD must be started first before attaching logcat", vim.log.levels.WARN)
-            end
-        end)
+        local mode = opts.args ~= "" and opts.args or config.get().logcat_mode
+        actions.logcat_only(mode)
     end, {
         nargs = "?",
         complete = function()
