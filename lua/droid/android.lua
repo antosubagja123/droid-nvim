@@ -217,27 +217,31 @@ function M.get_emulator_path()
         )
 end
 
-function M.get_running_devices(adb)
+function M.get_running_devices(adb, callback)
     if vim.fn.executable(adb) ~= 1 then
         vim.notify("ADB executable not found at " .. adb, vim.log.levels.ERROR)
-        return {}
+        callback({})
+        return
     end
-    local result = vim.fn.systemlist { adb, "devices", "-l" }
-    local devices = {}
-    for _, line in ipairs(result) do
-        if not line:match "List of devices" and #line > 0 then
-            local id, model = line:match "^(%S+)%s+device.*model:(%S+)"
-            if id and model then
-                table.insert(devices, { id = id, name = model })
-            else
-                local plain_id = line:match "^(%S+)%s+device"
-                if plain_id then
-                    table.insert(devices, { id = plain_id, name = "Unknown" })
+
+    vim.schedule(function()
+        local result = vim.fn.systemlist { adb, "devices", "-l" }
+        local devices = {}
+        for _, line in ipairs(result) do
+            if not line:match "List of devices" and #line > 0 then
+                local id, model = line:match "^(%S+)%s+device.*model:(%S+)"
+                if id and model then
+                    table.insert(devices, { id = id, name = model })
+                else
+                    local plain_id = line:match "^(%S+)%s+device"
+                    if plain_id then
+                        table.insert(devices, { id = plain_id, name = "Unknown" })
+                    end
                 end
             end
         end
-    end
-    return devices
+        callback(devices)
+    end)
 end
 
 function M.wait_for_device_id(adb, callback)
@@ -258,62 +262,63 @@ function M.wait_for_device_id(adb, callback)
             end)
             return
         end
-        local devices = M.get_running_devices(adb)
-        if #devices > 0 then
-            timer:stop()
-            timer:close()
-            vim.schedule(function()
+        M.get_running_devices(adb, function(devices)
+            if #devices > 0 then
+                timer:stop()
+                timer:close()
                 progress.update_spinner_message "Device ready"
                 callback(devices[1].id)
-            end)
-        end
+            end
+        end)
     end)
 end
 
-function M.get_all_targets(adb, emulator)
-    local targets = {}
-    local devices = M.get_running_devices(adb)
+function M.get_all_targets(adb, emulator, callback)
+    M.get_running_devices(adb, function(devices)
+        local targets = {}
 
-    for _, d in ipairs(devices) do
-        table.insert(targets, { type = "device", id = d.id, name = "Device: " .. d.name })
-    end
-
-    if vim.fn.executable(emulator) == 1 then
-        local avds = vim.fn.systemlist { emulator, "-list-avds" }
-        for _, avd in ipairs(avds) do
-            if #avd > 0 then
-                table.insert(targets, { type = "avd", name = "Emulator: " .. avd, avd = avd })
-            end
+        for _, d in ipairs(devices) do
+            table.insert(targets, { type = "device", id = d.id, name = "Device: " .. d.name })
         end
-    else
-        vim.notify("Emulator executable not found at " .. emulator, vim.log.levels.WARN)
-    end
 
-    return targets
+        if vim.fn.executable(emulator) == 1 then
+            local avds = vim.fn.systemlist { emulator, "-list-avds" }
+            for _, avd in ipairs(avds) do
+                if #avd > 0 then
+                    table.insert(targets, { type = "avd", name = "Emulator: " .. avd, avd = avd })
+                end
+            end
+        else
+            vim.notify("Emulator executable not found at " .. emulator, vim.log.levels.WARN)
+        end
+
+        callback(targets)
+    end)
 end
 
 function M.choose_target(adb, emulator, callback)
     local cfg = config.get()
-    local targets = M.get_all_targets(adb, emulator)
-    if #targets == 0 then
-        vim.notify("No devices or emulators available", vim.log.levels.ERROR)
-        return
-    end
-
-    if #targets == 1 and cfg.auto_select_single_target then
-        callback(targets[1])
-        return
-    end
-
-    vim.ui.select(targets, {
-        prompt = "Select device/emulator",
-        format_item = function(item)
-            return item.name
-        end,
-    }, function(choice)
-        if choice then
-            callback(choice)
+    M.get_all_targets(adb, emulator, function(targets)
+        if #targets == 0 then
+            vim.notify("No devices or emulators available", vim.log.levels.ERROR)
+            return
         end
+
+        if #targets == 1 and cfg.auto_select_single_target then
+            callback(targets[1])
+            return
+        end
+
+        vim.ui.select(targets, {
+            prompt = "Select device/emulator",
+            format_item = function(item)
+                return item.name
+            end,
+        }, function(choice)
+            if choice then
+                callback(choice)
+            end
+        end)
     end)
 end
 
@@ -386,41 +391,81 @@ function M.stop_emulator()
         return
     end
 
-    local running_devices = M.get_running_devices(adb)
-    local emulators = {}
+    M.get_running_devices(adb, function(running_devices)
+        local emulators = {}
 
-    for _, device in ipairs(running_devices) do
-        if device.id:match "^emulator%-" then
-            table.insert(emulators, { id = device.id, name = device.name })
+        for _, device in ipairs(running_devices) do
+            if device.id:match "^emulator%-" then
+                table.insert(emulators, { id = device.id, name = device.name })
+            end
         end
-    end
 
-    if #emulators == 0 then
-        vim.notify("No running emulators found", vim.log.levels.WARN)
-        return
-    end
-
-    vim.ui.select(emulators, {
-        prompt = "Select emulator to stop:",
-        format_item = function(emu)
-            return emu.id .. " (" .. emu.name .. ")"
-        end,
-    }, function(choice)
-        if choice then
-            vim.notify("Stopping emulator: " .. choice.id, vim.log.levels.INFO)
-            vim.fn.jobstart({ adb, "-s", choice.id, "emu", "kill" }, {
-                on_exit = vim.schedule_wrap(function(_, exit_code)
-                    if exit_code == 0 then
-                        vim.notify("Emulator stopped successfully: " .. choice.id, vim.log.levels.INFO)
-                    else
-                        vim.notify("Failed to stop emulator: " .. choice.id, vim.log.levels.ERROR)
-                    end
-                end),
-            })
-        else
-            vim.notify("Stop cancelled", vim.log.levels.INFO)
+        if #emulators == 0 then
+            vim.notify("No running emulators found", vim.log.levels.WARN)
+            return
         end
+
+        vim.ui.select(emulators, {
+            prompt = "Select emulator to stop:",
+            format_item = function(emu)
+                return emu.id .. " (" .. emu.name .. ")"
+            end,
+        }, function(choice)
+            if choice then
+                vim.notify("Stopping emulator: " .. choice.id, vim.log.levels.INFO)
+                vim.fn.jobstart({ adb, "-s", choice.id, "emu", "kill" }, {
+                    on_exit = vim.schedule_wrap(function(_, exit_code)
+                        if exit_code == 0 then
+                            vim.notify("Emulator stopped successfully: " .. choice.id, vim.log.levels.INFO)
+                        else
+                            vim.notify("Failed to stop emulator: " .. choice.id, vim.log.levels.ERROR)
+                        end
+                    end),
+                })
+            else
+                vim.notify("Stop cancelled", vim.log.levels.INFO)
+            end
+        end)
     end)
+end
+
+function M.handle_emulator_wipe_decision(adb, emulator, choice, is_running, running_emulator_id)
+    if is_running then
+        -- Ask user if they want to stop the running emulator
+        vim.ui.input({
+            prompt = "Emulator '" .. choice .. "' is running. Stop it and wipe data? (y/N): ",
+        }, function(input)
+            if input and (input:lower() == "y" or input:lower() == "yes") then
+                vim.notify("Stopping emulator before wipe...", vim.log.levels.INFO)
+                vim.fn.jobstart({ adb, "-s", running_emulator_id, "emu", "kill" }, {
+                    on_exit = vim.schedule_wrap(function(_, exit_code)
+                        if exit_code == 0 then
+                            vim.notify("Emulator stopped, wiping data...", vim.log.levels.INFO)
+                            -- Wait a moment then wipe data
+                            vim.defer_fn(function()
+                                M.start_wipe_data(emulator, choice)
+                            end, 2000)
+                        else
+                            vim.notify("Failed to stop emulator, cannot wipe data", vim.log.levels.ERROR)
+                        end
+                    end),
+                })
+            else
+                vim.notify("Wipe data cancelled", vim.log.levels.INFO)
+            end
+        end)
+    else
+        -- Emulator not running, ask for confirmation
+        vim.ui.input({
+            prompt = "Wipe data for '" .. choice .. "'? (y/N): ",
+        }, function(input)
+            if input and (input:lower() == "y" or input:lower() == "yes") then
+                M.start_wipe_data(emulator, choice)
+            else
+                vim.notify("Wipe data cancelled", vim.log.levels.INFO)
+            end
+        end)
+    end
 end
 
 function M.wipe_emulator_data()
@@ -444,61 +489,30 @@ function M.wipe_emulator_data()
         if choice then
             -- Check if this emulator is currently running
             local adb = M.get_adb_path()
-            local is_running = false
-            local running_emulator_id = nil
 
             if adb then
-                local running_devices = M.get_running_devices(adb)
-                for _, device in ipairs(running_devices) do
-                    if device.id:match "^emulator%-" then
-                        -- Try to match by getting AVD name from running emulator
-                        local result =
-                            vim.fn.system { adb, "-s", device.id, "shell", "getprop", "ro.kernel.qemu.avd_name" }
-                        local avd_name = vim.trim(result)
-                        if avd_name == choice then
-                            is_running = true
-                            running_emulator_id = device.id
-                            break
+                M.get_running_devices(adb, function(running_devices)
+                    local is_running = false
+                    local running_emulator_id = nil
+
+                    for _, device in ipairs(running_devices) do
+                        if device.id:match "^emulator%-" then
+                            -- Try to match by getting AVD name from running emulator
+                            local result =
+                                vim.fn.system { adb, "-s", device.id, "shell", "getprop", "ro.kernel.qemu.avd_name" }
+                            local avd_name = vim.trim(result)
+                            if avd_name == choice then
+                                is_running = true
+                                running_emulator_id = device.id
+                                break
+                            end
                         end
                     end
-                end
-            end
 
-            if is_running then
-                -- Ask user if they want to stop the running emulator
-                vim.ui.input({
-                    prompt = "Emulator '" .. choice .. "' is running. Stop it and wipe data? (y/N): ",
-                }, function(input)
-                    if input and (input:lower() == "y" or input:lower() == "yes") then
-                        vim.notify("Stopping emulator before wipe...", vim.log.levels.INFO)
-                        vim.fn.jobstart({ adb, "-s", running_emulator_id, "emu", "kill" }, {
-                            on_exit = vim.schedule_wrap(function(_, exit_code)
-                                if exit_code == 0 then
-                                    vim.notify("Emulator stopped, wiping data...", vim.log.levels.INFO)
-                                    -- Wait a moment then wipe data
-                                    vim.defer_fn(function()
-                                        M.start_wipe_data(emulator, choice)
-                                    end, 2000)
-                                else
-                                    vim.notify("Failed to stop emulator, cannot wipe data", vim.log.levels.ERROR)
-                                end
-                            end),
-                        })
-                    else
-                        vim.notify("Wipe data cancelled", vim.log.levels.INFO)
-                    end
+                    M.handle_emulator_wipe_decision(adb, emulator, choice, is_running, running_emulator_id)
                 end)
             else
-                -- Emulator not running, ask for confirmation
-                vim.ui.input({
-                    prompt = "Wipe data for '" .. choice .. "'? (y/N): ",
-                }, function(input)
-                    if input and (input:lower() == "y" or input:lower() == "yes") then
-                        M.start_wipe_data(emulator, choice)
-                    else
-                        vim.notify("Wipe data cancelled", vim.log.levels.INFO)
-                    end
-                end)
+                M.handle_emulator_wipe_decision(adb, emulator, choice, false, nil)
             end
         else
             vim.notify("Wipe data cancelled", vim.log.levels.INFO)
