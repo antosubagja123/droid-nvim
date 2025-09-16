@@ -35,9 +35,10 @@ local function find_gradlew()
     return nil
 end
 
-local function run_gradle_task(cwd, gradlew, task, args)
+local function run_gradle_task(cwd, gradlew, task, args, callback)
     local cmd_args = vim.iter({ task, args or {} }):flatten():totable()
     local cmd = gradlew .. " " .. table.concat(cmd_args, " ")
+    local job_id = nil
 
     -- Reuse existing terminal buffer if valid
     if M.term_buf and vim.api.nvim_buf_is_valid(M.term_buf) then
@@ -53,12 +54,33 @@ local function run_gradle_task(cwd, gradlew, task, args)
         end
 
         -- Start new terminal job in existing buffer
-        vim.fn.termopen(cmd, { cwd = cwd })
+        job_id = vim.fn.termopen(cmd, {
+            cwd = cwd,
+            on_exit = function(_, exit_code)
+                if callback then
+                    vim.schedule(function()
+                        callback(exit_code == 0, exit_code)
+                    end)
+                end
+            end,
+        })
     else
-        -- Create new terminal buffer
-        vim.cmd("botright split | resize 15 | terminal " .. cmd)
-        M.term_buf = vim.api.nvim_get_current_buf()
+        -- Create new terminal buffer and start job
+        vim.cmd "botright split | resize 15"
         M.term_win = vim.api.nvim_get_current_win()
+        M.term_buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
+
+        job_id = vim.fn.termopen(cmd, {
+            cwd = cwd,
+            on_exit = function(_, exit_code)
+                if callback then
+                    vim.schedule(function()
+                        callback(exit_code == 0, exit_code)
+                    end)
+                end
+            end,
+        })
 
         -- Handle buffer deletion
         vim.api.nvim_create_autocmd("BufDelete", {
@@ -103,30 +125,114 @@ end
 
 function M.sync()
     local g = find_gradlew()
-    if g then
-        run_gradle_task(g.cwd, g.gradlew, "--refresh-dependencies")
+    if not g then
+        return
     end
+
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidSync",
+        priority = progress.PRIORITY.MEDIUM,
+        message = "Syncing dependencies",
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
+    run_gradle_task(g.cwd, g.gradlew, "--refresh-dependencies", nil, function(success, exit_code)
+        local message
+        if success then
+            message = "Dependencies synced successfully"
+        else
+            message = string.format("Sync failed (exit code: %d)", exit_code)
+        end
+        progress.stop_loading(session_id, success, message)
+    end)
 end
 
 function M.clean()
     local g = find_gradlew()
-    if g then
-        run_gradle_task(g.cwd, g.gradlew, "clean")
+    if not g then
+        return
     end
+
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidClean",
+        priority = progress.PRIORITY.MEDIUM,
+        message = "Cleaning project",
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
+    run_gradle_task(g.cwd, g.gradlew, "clean", nil, function(success, exit_code)
+        local message
+        if success then
+            message = "Project cleaned successfully"
+        else
+            message = string.format("Clean failed (exit code: %d)", exit_code)
+        end
+        progress.stop_loading(session_id, success, message)
+    end)
 end
 
 function M.build_debug()
     local g = find_gradlew()
-    if g then
-        run_gradle_task(g.cwd, g.gradlew, "assembleDebug")
+    if not g then
+        return
     end
+
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidBuildDebug",
+        priority = progress.PRIORITY.HIGH,
+        message = "Building debug APK",
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
+    run_gradle_task(g.cwd, g.gradlew, "assembleDebug", nil, function(success, exit_code)
+        local message
+        if success then
+            message = "Debug APK built successfully"
+        else
+            message = string.format("Build failed (exit code: %d)", exit_code)
+        end
+        progress.stop_loading(session_id, success, message)
+    end)
 end
 
 function M.task(task, args)
     local g = find_gradlew()
-    if g then
-        run_gradle_task(g.cwd, g.gradlew, task, args)
+    if not g then
+        return
     end
+
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidTask",
+        priority = progress.PRIORITY.HIGH,
+        message = "Running task: " .. task,
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
+    run_gradle_task(g.cwd, g.gradlew, task, args, function(success, exit_code)
+        local message
+        if success then
+            message = string.format("Task '%s' completed successfully", task)
+        else
+            message = string.format("Task '%s' failed (exit code: %d)", task, exit_code)
+        end
+        progress.stop_loading(session_id, success, message)
+    end)
 end
 
 -- Pure install function (no launching)

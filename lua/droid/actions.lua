@@ -75,16 +75,32 @@ function M.build_and_run()
         return
     end
 
-    progress.start_workflow(4) -- 4 steps: target selection, install, launch, logcat
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidRun",
+        priority = progress.PRIORITY.CRITICAL,
+        type = "workflow",
+        steps = 4,
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
     progress.next_step "Selecting target device"
 
     M.select_target(tools, function(target)
+        if not target then
+            progress.stop_loading(session_id, false, "No target selected")
+            return
+        end
+
         if target.type == "device" then
             progress.next_step("Installing on " .. target.name)
             M.install_and_launch(tools.adb, target.id, function()
                 progress.next_step "Starting logcat"
                 M.open_logcat(tools.adb, target.id)
-                progress.complete_workflow "DroidRun completed successfully"
+                progress.stop_loading(session_id, true, "DroidRun completed successfully")
             end)
         elseif target.type == "avd" then
             progress.next_step("Starting emulator", true) -- use spinner for emulator start
@@ -94,10 +110,10 @@ function M.build_and_run()
                     M.install_and_launch(tools.adb, device_id, function()
                         progress.next_step "Starting logcat"
                         M.open_logcat(tools.adb, device_id)
-                        progress.complete_workflow "DroidRun completed successfully"
+                        progress.stop_loading(session_id, true, "DroidRun completed successfully")
                     end)
                 else
-                    progress.error_workflow "Failed to start emulator or device not ready"
+                    progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
                 end
             end)
         end
@@ -111,16 +127,40 @@ function M.install_only()
         return
     end
 
+    -- Start loading with global management
+    local session_id = progress.start_loading {
+        command = "DroidInstall",
+        priority = progress.PRIORITY.CRITICAL,
+        message = "Selecting target device",
+    }
+
+    if not session_id then
+        return -- Loading was queued or cancelled
+    end
+
     M.select_target(tools, function(target)
+        if not target then
+            progress.stop_loading(session_id, false, "No target selected")
+            return
+        end
+
         if target.type == "device" then
-            vim.notify("Installing on " .. target.name, vim.log.levels.INFO)
-            M.install_debug(tools.adb, target.id)
+            progress.update_spinner_message("Installing on " .. target.name)
+            M.install_debug(tools.adb, target.id, function()
+                progress.stop_loading(session_id, true, "Installation completed")
+            end)
         elseif target.type == "avd" then
-            vim.notify("Starting emulator", vim.log.levels.INFO)
+            progress.update_spinner_message "Starting emulator"
             android.start_emulator(tools.emulator, target.avd)
             android.wait_for_device_id(tools.adb, function(device_id)
-                vim.notify("Installing on emulator", vim.log.levels.INFO)
-                M.install_debug(tools.adb, device_id)
+                if device_id then
+                    progress.update_spinner_message "Installing on emulator"
+                    M.install_debug(tools.adb, device_id, function()
+                        progress.stop_loading(session_id, true, "Installation completed")
+                    end)
+                else
+                    progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
+                end
             end)
         end
     end)
