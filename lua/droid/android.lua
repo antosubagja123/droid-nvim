@@ -65,8 +65,6 @@ function M.launch_app_on_device(adb, device_id, callback)
         return
     end
 
-    vim.notify("Launching " .. application_id .. "...", vim.log.levels.INFO)
-
     local main_activity = M.find_main_activity(adb, device_id, application_id)
     if not main_activity then
         vim.notify("Failed to find main activity, trying monkey command...", vim.log.levels.WARN)
@@ -85,7 +83,7 @@ function M.launch_app_on_device(adb, device_id, callback)
         }, {}):wait()
 
         if launch_obj.code == 0 then
-            vim.notify("App launched successfully (via monkey)!", vim.log.levels.INFO)
+            vim.notify("App launched successfully!", vim.log.levels.INFO)
         else
             vim.notify("Failed to launch app: " .. (launch_obj.stderr or "unknown error"), vim.log.levels.ERROR)
         end
@@ -343,9 +341,7 @@ function M.choose_target(adb, emulator, callback)
 end
 
 function M.start_emulator(emulator, avd)
-    vim.notify("Starting emulator " .. avd, vim.log.levels.INFO)
-
-    local cmd, cmd_str = M.build_emulator_command(emulator, { "-avd", avd })
+    local cmd, _ = M.build_emulator_command(emulator, { "-avd", avd })
     return vim.fn.jobstart(cmd)
 end
 
@@ -387,10 +383,9 @@ function M.launch_emulator()
         end,
     }, function(choice)
         if choice then
-            local cfg = config.get()
             vim.notify("Launching Emulator: " .. choice, vim.log.levels.INFO)
 
-            local job_args, cmd_str = M.build_emulator_command(emulator, { "-avd", choice })
+            local job_args, _ = M.build_emulator_command(emulator, { "-avd", choice })
 
             vim.fn.jobstart(job_args, {
                 on_exit = vim.schedule_wrap(function(_, exit_code)
@@ -456,11 +451,9 @@ function M.handle_emulator_wipe_decision(adb, emulator, choice, is_running, runn
             prompt = "Emulator '" .. choice .. "' is running. Stop it and wipe data? (y/N): ",
         }, function(input)
             if input and (input:lower() == "y" or input:lower() == "yes") then
-                vim.notify("Stopping emulator before wipe...", vim.log.levels.INFO)
                 vim.fn.jobstart({ adb, "-s", running_emulator_id, "emu", "kill" }, {
                     on_exit = vim.schedule_wrap(function(_, exit_code)
                         if exit_code == 0 then
-                            vim.notify("Emulator stopped, wiping data...", vim.log.levels.INFO)
                             -- Wait a moment then wipe data
                             vim.defer_fn(function()
                                 M.start_wipe_data(emulator, choice)
@@ -541,16 +534,19 @@ function M.wipe_emulator_data()
 end
 
 function M.start_wipe_data(emulator, avd)
-    vim.notify("Wiping data for Emulator: " .. avd, vim.log.levels.INFO)
-
-    local cmd, cmd_str = M.build_emulator_command(emulator, { "-avd", avd, "-wipe-data" })
+    local session_id = progress.start_loading {
+        command = "DroidEmulatorWipeData",
+        priority = progress.PRIORITY.LOW,
+        message = string.format("Wiping data for: %s", avd),
+    }
+    local cmd, _ = M.build_emulator_command(emulator, { "-avd", avd, "-wipe-data" })
 
     vim.fn.jobstart(cmd, {
         on_exit = vim.schedule_wrap(function(_, exit_code)
             if exit_code == 0 then
-                vim.notify("Emulator data wiped successfully: " .. avd, vim.log.levels.INFO)
+                progress.stop_loading(session_id, true, "Emulator data wiped successfully")
             else
-                vim.notify("Failed to wipe Emulator data: " .. avd, vim.log.levels.ERROR)
+                progress.stop_loading(session_id, false, "Failed to wipe Emulator data")
             end
         end),
     })

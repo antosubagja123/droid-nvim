@@ -45,7 +45,7 @@ end
 
 -- Installs debug APK only (no launch)
 -- Args: adb, device_id, callback() - called after install completes
-function M.install_debug(adb, device_id, callback)
+function M.install_debug(callback)
     gradle.install_debug(callback)
 end
 
@@ -78,7 +78,7 @@ function M.build_and_run()
         local session_id = progress.start_loading {
             command = "DroidRun",
             priority = progress.PRIORITY.CRITICAL,
-            message = "Running build and install workflow",
+            message = "Running build and install application",
         }
 
         if not session_id then
@@ -88,7 +88,6 @@ function M.build_and_run()
         if target.type == "device" then
             M.install_and_launch(tools.adb, target.id, function()
                 -- Add delay before starting logcat to let app fully start
-                local config = require "droid.config"
                 local cfg = config.get()
                 local delay_ms = cfg.logcat_startup_delay_ms or 2000
 
@@ -103,7 +102,6 @@ function M.build_and_run()
                 if device_id then
                     M.install_and_launch(tools.adb, device_id, function()
                         -- Add delay before starting logcat to let app fully start
-                        local config = require "droid.config"
                         local cfg = config.get()
                         local delay_ms = cfg.logcat_startup_delay_ms or 2000
 
@@ -146,7 +144,7 @@ function M.install_only()
 
         if target.type == "device" then
             progress.update_spinner_message("Installing on " .. target.name)
-            M.install_debug(tools.adb, target.id, function()
+            M.install_debug(function()
                 progress.stop_loading(session_id, true, "Installation completed")
             end)
         elseif target.type == "avd" then
@@ -155,7 +153,7 @@ function M.install_only()
             android.wait_for_device_id(tools.adb, function(device_id)
                 if device_id then
                     progress.update_spinner_message "Installing on emulator"
-                    M.install_debug(tools.adb, device_id, function()
+                    M.install_debug(function()
                         progress.stop_loading(session_id, true, "Installation completed")
                     end)
                 else
@@ -167,19 +165,14 @@ function M.install_only()
 end
 
 -- Logcat-only workflow
-function M.logcat_only(mode)
+function M.logcat_only()
     local tools = M.get_required_tools()
     if not tools then
         return
     end
 
-    M.select_target(tools, function(target)
-        if target.type == "device" then
-            logcat.apply_filters {}
-        elseif target.type == "avd" then
-            vim.notify("AVD must be started first before attaching logcat", vim.log.levels.WARN)
-        end
-    end)
+    -- Directly use logcat's device selection (which now only shows running devices)
+    logcat.apply_filters {}
 end
 
 -- Device selection workflow (just shows selected device)

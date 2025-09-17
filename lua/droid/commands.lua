@@ -1,7 +1,6 @@
 local gradle = require "droid.gradle"
 local android = require "droid.android"
 local logcat = require "droid.logcat"
-local config = require "droid.config"
 local actions = require "droid.actions"
 
 local M = {}
@@ -42,9 +41,8 @@ function M.setup_commands()
         actions.install_only()
     end, {})
 
-    vim.api.nvim_create_user_command("DroidLogcat", function(opts)
-        local mode = opts.args ~= "" and opts.args or config.get().logcat_mode
-        actions.logcat_only(mode)
+    vim.api.nvim_create_user_command("DroidLogcat", function()
+        actions.logcat_only()
     end, {
         nargs = "?",
         complete = function()
@@ -75,7 +73,7 @@ function M.setup_commands()
         logcat.apply_filters(filters)
     end, {
         nargs = "*",
-        complete = function(arg_lead, cmd_line, cursor_pos)
+        complete = function(arg_lead, _, _)
             local completions = {
                 "package=",
                 "package=mine",

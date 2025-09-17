@@ -2,185 +2,128 @@
 
 # 🤖 droid.nvim
 
-**Bring Android Studio experience to Neovim**
+**Complete Android development workflow for Neovim**
 
 [![Neovim](https://img.shields.io/badge/Neovim-0.10+-green.svg?style=flat-square&logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Made%20with-Lua-blue.svg?style=flat-square&logo=lua)](https://lua.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-Complete Android development workflow in Neovim - build, install, launch, and debug your apps with the same seamless experience as Android Studio.
+Build, run, and debug Android apps directly from Neovim with real-time logcat filtering.
 
 </div>
 
-> **⚠️ Development Status**
-> This project is under heavy maintenance. Expect breaking changes and frequent updates as we improve the codebase.
-
 ## ✨ Features
 
-- 🔧 **Gradle Integration** - Build, clean, sync, and run custom Gradle tasks
-- 📱 **Device Management** - Automatic device/emulator detection and selection
-- 📋 **Logcat Support** - Real-time logcat output in multiple window modes
-- 🚀 **Auto Launch** - Automatically launches apps after installation (like Android Studio)
-- ⚡ **Simple Commands** - Intuitive commands for common Android development tasks
-- ⚙️ **Configurable** - Flexible configuration for different development setups
+- 🔧 **Gradle Integration** - Build, clean, sync, and run custom tasks
+- 📱 **Emulator Integration** - Run, Stop, Device/emulator List and Selection
+- 📋 **Advanced Logcat** - Real-time filtering by package, tag, log level, and text patterns
+- 🚀 **Rich-Command Workflow** - Build → Install → Launch → Logcat in one step
+- ⚙️ **Flexible Windows** - Horizontal, vertical, or floating logcat display
 
 ## 📦 Installation
 
-### Requirements
-
-- Neovim 0.10.0+
-- Android SDK with `adb` and `emulator`
-- Android project with `gradlew`
-
-### lazy.nvim
+**Requirements:** Neovim 0.10+, Android SDK, project with `gradlew`
 
 ```lua
+-- lazy.nvim
 {
   "rizukirr/droid-nvim",
   config = function()
-      require("droid").setup()
+    require("droid").setup()
   end,
 }
 ```
 
-### packer.nvim
-
-```lua
-use {
-  "rizukirr/droid-nvim",
-  config = function()
-      require("droid").setup()
-  end,
-}
-```
-
-## ⚙️ Configuration
-
-Optional configuration can be passed to `setup()`:
+**Configuration (optional):**
 
 ```lua
 require("droid").setup({
-    logcat = {
-        window_type = "horizontal", -- "horizontal" | "vertical" | "float"
-        height = 12,
-        width = 80,
-    },
-    android = {
-        auto_select_single_target = true,
-        auto_launch_app = true,     -- Launch app after install
-    },
+  logcat = {
+    window_type = "horizontal", -- "horizontal" | "vertical" | "float"
+    height = 12,
+  },
+  android = {
+    auto_select_single_target = true,
+    auto_launch_app = true,
+  },
 })
 ```
 
 ## 🚀 Usage
 
-### Commands
+### Core Commands
 
-| Command                    | Description                                                       |
-| -------------------------- | ----------------------------------------------------------------- |
-| `:DroidRun`                | Build and install the debug variant with logcat output            |
-| `:DroidBuildDebug`         | Run `assembleDebug` Gradle task to build debug APK                |
-| `:DroidClean`              | Run `clean` Gradle task to clear build artifacts                  |
-| `:DroidSync`               | Run `gradlew --refresh-dependencies` to sync dependencies         |
-| `:DroidTask <task> [args]` | Run custom Gradle task (e.g., `:DroidTask assembleRelease`)       |
-| `:DroidLogcat [mode]`      | Open logcat in specified mode (`horizontal`, `vertical`, `float`) |
-| `:DroidLogcatStop`         | Stop active logcat process and close buffer                       |
-| `:DroidEmulator`           | Launch an emulator (standalone AVD picker)                        |
-| `:DroidEmulatorStop`       | Stop a running emulator                                           |
-| `:DroidEmulatorWipeData`   | Wipe emulator data (handles running emulators automatically)      |
+| Command            | Description                                           |
+| ------------------ | ----------------------------------------------------- |
+| `:DroidRun`        | Build → Install → Launch → Logcat (complete workflow) |
+| `:DroidBuildDebug` | Build debug APK only                                  |
+| `:DroidLogcat`     | Open logcat viewer                                    |
+| `:DroidLogcatStop` | Stop logcat                                           |
 
-### 🎯 Recommended Keybindings
+### Logcat Filtering
+
+| Command                                | Example                                             |
+| -------------------------------------- | --------------------------------------------------- |
+| `:DroidLogcatFilter log_level=<level>` | `log_level=d` (debug+), `log_level=e` (errors only) |
+| `:DroidLogcatFilter tag=<name>`        | `tag=MyTag`                                         |
+| `:DroidLogcatFilter package=<name>`    | `package=com.example.app`                           |
+| `:DroidLogcatFilter grep=<pattern>`    | `grep=Network`                                      |
+
+**Combine filters:** `:DroidLogcatFilter tag=MyTag log_level=d`
+
+### Other Commands
+
+| Command             | Description            |
+| ------------------- | ---------------------- |
+| `:DroidTask <task>` | Run custom Gradle task |
+| `:DroidEmulator`    | Launch emulator        |
+| `:DroidSync`        | Sync dependencies      |
+| `:DroidClean`       | Clean project          |
+
+### Quick Setup
 
 ```lua
+-- Recommended keybindings
 vim.keymap.set("n", "<leader>ar", ":DroidRun<CR>", { desc = "Run Android app" })
 vim.keymap.set("n", "<leader>ab", ":DroidBuildDebug<CR>", { desc = "Build debug APK" })
-vim.keymap.set("n", "<leader>ac", ":DroidClean<CR>", { desc = "Clean project" })
-vim.keymap.set("n", "<leader>as", ":DroidSync<CR>", { desc = "Sync dependencies" })
 vim.keymap.set("n", "<leader>al", ":DroidLogcat<CR>", { desc = "Open logcat" })
 vim.keymap.set("n", "<leader>ax", ":DroidLogcatStop<CR>", { desc = "Stop logcat" })
-vim.keymap.set("n", "<leader>ae", ":DroidEmulator<CR>", { desc = "Launch emulator" })
-vim.keymap.set("n", "<leader>aE", ":DroidEmulatorStop<CR>", { desc = "Stop emulator" })
-vim.keymap.set("n", "<leader>aw", ":DroidEmulatorWipeData<CR>", { desc = "Wipe emulator data" })
 ```
 
-### 📋 Common Workflows
+### Typical Workflow
 
-#### Development Cycle
+1. **`:DroidRun`** - Build, install, and launch your app with logcat
+2. **`:DroidLogcatFilter log_level=e`** - Filter to show only errors
+3. **`:DroidLogcatFilter tag=MyTag`** - Focus on specific component
+4. **`:DroidLogcatStop`** - Stop when done
 
-1. `:DroidSync` - Sync dependencies when `build.gradle` changes
-2. `:DroidBuildDebug` - Build your app to check for compilation errors
-3. `:DroidRun` - Deploy and run with live logcat output
-4. `:DroidLogcat vertical` - Switch logcat to vertical mode if needed
-5. `:DroidLogcatStop` - Stop logcat when done
+### Examples
 
-#### Testing on Multiple Devices
+```vim
+:DroidTask assembleRelease           " Build release APK
+:DroidTask testDebugUnitTest         " Run unit tests
+:DroidLogcatFilter package=mine log_level=d  " Your app, debug level+
+```
 
-1. `:DroidEmulator` - Launch additional emulators
-2. `:DroidRun` - Select different targets for each run
-3. Use multiple Neovim instances for parallel logcat monitoring
+## Environment Setup
 
-#### Emulator Management
-
-1. `:DroidEmulator` - Launch a new emulator instance
-2. `:DroidEmulatorStop` - Stop running emulators when done
-3. `:DroidEmulatorWipeData` - Reset emulator to clean state (handles running emulators automatically)
-
-#### Custom Gradle Tasks
+Set your Android SDK path:
 
 ```lua
-:DroidTask assembleRelease           -- Build release APK
-:DroidTask testDebugUnitTest        -- Run unit tests
-:DroidTask connectedDebugAndroidTest -- Run instrumented tests
-:DroidTask bundleRelease            -- Build app bundle
+vim.g.android_sdk = "/path/to/android-sdk"  -- Optional if ANDROID_SDK_ROOT is set
 ```
 
-## 🔧 Environment Setup
+Make sure `gradlew` is executable: `chmod +x gradlew`
 
-- Ensure the Android SDK is installed and either `ANDROID_SDK_ROOT` or `ANDROID_HOME` is set, or set `vim.g.android_sdk` in Neovim:
+## Troubleshooting
 
-```lua
- vim.g.android_sdk = "/path/to/android-sdk"
-```
+**Common Issues:**
 
-- Ensure `gradlew` is executable in your project directory.
-
-## 📝 Notes
-
-- The plugin automatically detects the Android SDK and Gradle wrapper (`gradlew`) in your project.
-- If only one device/emulator is available, it can be auto-selected (configurable via `auto_select_single_target`).
-- Logcat output is displayed in a scratch buffer with the `logcat` filetype, which can be customized with syntax highlighting (not included by default).
-- The plugin ensures `logcat` processes are cleaned up when the buffer is closed or Neovim exits.
-
-## 🔧 Troubleshooting
-
-- **"gradlew not found"**: Ensure your project has an executable `gradlew` file. Run `chmod +x gradlew` if needed.
-- **"Android SDK not found"**: Set `ANDROID_SDK_ROOT`, `ANDROID_HOME`, or `vim.g.android_sdk` to the SDK path.
-- **"No devices or emulators available"**: Ensure `adb` is running and devices/emulators are connected (`adb devices`).
-- **Logcat not showing**: Check if the selected device is online and supports `logcat`.
-- **Emulator won't start on Linux**: Try setting the Qt platform:
-  ```lua
-  android = {
-      qt_qpa_platform = "xcb"
-  }
-  ```
-  **Common Qt Platform Values:**
-  - `"xcb"` - For Linux X11 systems (most common)
-  - `"wayland"` - For Linux Wayland systems
-  - `"offscreen"` - For headless/server environments
-  - `nil` - Use system default (default)
-- **Emulator starts but app doesn't install**: Wait for the emulator to fully boot before running `:DroidRun`.
-- **Permission denied errors**: Ensure `gradlew` has execute permissions and emulator tools are accessible.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests to help improve droid.nvim.
-
-## 📄 License
-
-MIT License
+- **"gradlew not found"**: Run `chmod +x gradlew` in your project
+- **"Android SDK not found"**: Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`
+- **"No devices available"**: Check `adb devices`
+- **Emulator won't start because QT Platform issue (Linux)**: Set `qt_qpa_platform = "xcb"` in config
 
 ---
 
-<div align="center">
-<sub>If this plugin helps your workflow, consider <a href="https://ko-fi.com/rizukirr">buying me a coffee</a> ☕</sub>
-</div>
+**License:** MIT | **Contributions:** Welcome!
