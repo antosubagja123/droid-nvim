@@ -103,8 +103,8 @@ function M.setup_commands()
         logcat.show_current_filters()
     end, {})
 
-    vim.api.nvim_create_user_command("DroidGradleLog", function()
-        gradle.show_log()
+    vim.api.nvim_create_user_command("DroidGradleToggle", function()
+        gradle.toggle_gradle_window()
     end, {})
 
     vim.api.nvim_create_user_command("DroidGradleStop", function()

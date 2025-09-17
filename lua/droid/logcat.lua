@@ -267,6 +267,35 @@ function M.start(adb, device_id, mode, override_filters)
         end
     end
 
+    -- Smart reuse logic: check if we can reuse existing logcat session
+    if M.job_id and M.current_adb == adb and M.current_device_id == device_id then
+        -- Same device and logcat is running
+
+        if not override_filters or (type(override_filters) == "table" and next(override_filters) == nil) then
+            -- No filter override or empty table (DroidRun, DroidLogcat case) - always reuse
+            vim.notify("Reusing existing logcat session", vim.log.levels.INFO)
+
+            -- Reopen window if it was closed
+            if not M.win or not vim.api.nvim_win_is_valid(M.win) then
+                open_window(mode)
+            end
+            return
+        else
+            -- Filter override provided (DroidLogcatFilter case) - check equivalence
+            if filters_equivalent(M.current_filters, active_filters) then
+                vim.notify("Logcat filters unchanged, reusing session", vim.log.levels.INFO)
+
+                -- Reopen window if it was closed
+                if not M.win or not vim.api.nvim_win_is_valid(M.win) then
+                    open_window(mode)
+                end
+                return
+            else
+                vim.notify("Filter changes detected, restarting logcat", vim.log.levels.INFO)
+            end
+        end
+    end
+
     M.current_filters = active_filters
     M.current_device_id = device_id
     M.current_adb = adb

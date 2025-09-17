@@ -55,12 +55,6 @@ function M.install_and_launch(adb, device_id, callback)
     gradle.install_debug_and_launch(adb, device_id, callback)
 end
 
--- Launches app on device (without install)
--- Args: adb, device_id, callback() - called after launch completes
-function M.launch_app(adb, device_id, callback)
-    android.launch_app_on_device(adb, device_id, callback)
-end
-
 -- Complete build and run workflow (the core DroidRun functionality)
 -- This is the main workflow: select target -> install+launch -> logcat
 function M.build_and_run()

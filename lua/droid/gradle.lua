@@ -70,25 +70,7 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
 
                 -- Show terminal window only on completion
                 vim.schedule(function()
-                    if not M.term_win or not vim.api.nvim_win_is_valid(M.term_win) then
-                        vim.cmd "botright split | resize 15"
-                        M.term_win = vim.api.nvim_get_current_win()
-                        vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
-                    else
-                        -- Focus existing window
-                        vim.api.nvim_set_current_win(M.term_win)
-                    end
-
-                    -- Configure window appearance (hide line numbers for cleaner output)
-                    vim.wo[M.term_win].number = false
-                    vim.wo[M.term_win].relativenumber = false
-                    vim.wo[M.term_win].signcolumn = "no"
-
-                    -- Scroll to bottom to show latest output
-                    vim.cmd "normal! G"
-
-                    -- Exit insert mode if we're in it
-                    vim.cmd "stopinsert"
+                    M.open_gradle_window()
 
                     -- Run callback
                     if callback then
@@ -100,20 +82,65 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
     end)
 end
 
+function M.open_gradle_window()
+    if not M.term_buf or not vim.api.nvim_buf_is_valid(M.term_buf) then
+        return false
+    end
+
+    if M.term_win and vim.api.nvim_win_is_valid(M.term_win) then
+        -- Focus existing window
+        vim.api.nvim_set_current_win(M.term_win)
+    else
+        -- Create new window
+        vim.cmd "botright split | resize 15"
+        M.term_win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
+
+        -- Configure window appearance
+        vim.wo[M.term_win].number = false
+        vim.wo[M.term_win].relativenumber = false
+        vim.wo[M.term_win].signcolumn = "no"
+    end
+
+    -- Scroll to bottom
+    vim.cmd "normal! G"
+    vim.cmd "stopinsert"
+    return true
+end
+
+function M.is_gradle_window_visible()
+    return M.term_win and vim.api.nvim_win_is_valid(M.term_win)
+end
+
 function M.show_log()
-    if M.term_buf and vim.api.nvim_buf_is_valid(M.term_buf) then
-        if M.term_win and vim.api.nvim_win_is_valid(M.term_win) then
-            -- Focus existing window
-            vim.api.nvim_set_current_win(M.term_win)
-        else
-            -- Window was closed, reopen it
-            vim.cmd "botright split | resize 15"
-            M.term_win = vim.api.nvim_get_current_win()
-            vim.api.nvim_win_set_buf(M.term_win, M.term_buf)
-        end
-        vim.cmd "normal! G"
+    if M.open_gradle_window() then
+        return
     else
         vim.notify("No gradle terminal buffer available. Run a gradle command first.", vim.log.levels.WARN)
+    end
+end
+
+function M.hide_gradle_window()
+    if M.term_win and vim.api.nvim_win_is_valid(M.term_win) then
+        vim.api.nvim_win_close(M.term_win, false)
+        M.term_win = nil
+        return true
+    end
+    return false
+end
+
+function M.toggle_gradle_window()
+    if M.is_gradle_window_visible() then
+        -- Window is visible, hide it
+        M.hide_gradle_window()
+        vim.notify("Gradle window hidden", vim.log.levels.INFO)
+    else
+        -- Window is hidden, show it
+        if M.open_gradle_window() then
+            vim.notify("Gradle window shown", vim.log.levels.INFO)
+        else
+            vim.notify("No gradle terminal buffer available. Run a gradle command first.", vim.log.levels.WARN)
+        end
     end
 end
 
@@ -267,7 +294,7 @@ function M.install_debug_and_launch(adb, device_id, callback)
         -- Launch app if auto_launch_app is enabled
         if cfg.auto_launch_app then
             local android = require "droid.android"
-            android.simple_launch_app(adb, device_id, callback)
+            android.launch_app_on_device(adb, device_id, callback)
         else
             if callback then
                 vim.schedule(callback)

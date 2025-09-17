@@ -121,16 +121,6 @@ function M.launch_app_on_device(adb, device_id, callback)
     end
 end
 
--- Alias for backward compatibility
-function M.simple_launch_app(adb, device_id, callback)
-    return M.launch_app_on_device(adb, device_id, callback)
-end
-
--- Get project package name (standalone utility)
-function M.get_project_package_name()
-    return M.find_application_id()
-end
-
 function M.get_app_pid(adb, device_id, package_name, callback)
     if not package_name or package_name == "" then
         callback(nil)
@@ -444,43 +434,6 @@ function M.stop_emulator()
     end)
 end
 
-function M.handle_emulator_wipe_decision(adb, emulator, choice, is_running, running_emulator_id)
-    if is_running then
-        -- Ask user if they want to stop the running emulator
-        vim.ui.input({
-            prompt = "Emulator '" .. choice .. "' is running. Stop it and wipe data? (y/N): ",
-        }, function(input)
-            if input and (input:lower() == "y" or input:lower() == "yes") then
-                vim.fn.jobstart({ adb, "-s", running_emulator_id, "emu", "kill" }, {
-                    on_exit = vim.schedule_wrap(function(_, exit_code)
-                        if exit_code == 0 then
-                            -- Wait a moment then wipe data
-                            vim.defer_fn(function()
-                                M.start_wipe_data(emulator, choice)
-                            end, 2000)
-                        else
-                            vim.notify("Failed to stop emulator, cannot wipe data", vim.log.levels.ERROR)
-                        end
-                    end),
-                })
-            else
-                vim.notify("Wipe data cancelled", vim.log.levels.INFO)
-            end
-        end)
-    else
-        -- Emulator not running, ask for confirmation
-        vim.ui.input({
-            prompt = "Wipe data for '" .. choice .. "'? (y/N): ",
-        }, function(input)
-            if input and (input:lower() == "y" or input:lower() == "yes") then
-                M.start_wipe_data(emulator, choice)
-            else
-                vim.notify("Wipe data cancelled", vim.log.levels.INFO)
-            end
-        end)
-    end
-end
-
 function M.wipe_emulator_data()
     local emulator = M.get_emulator_path()
     if not emulator then
@@ -500,188 +453,34 @@ function M.wipe_emulator_data()
         end,
     }, function(choice)
         if choice then
-            -- Check if this emulator is currently running
-            local adb = M.get_adb_path()
+            vim.ui.input({
+                prompt = "Wipe data for '" .. choice .. "'? (y/N): ",
+            }, function(input)
+                if input and (input:lower() == "y" or input:lower() == "yes") then
+                    local session_id = progress.start_loading {
+                        command = "DroidEmulatorWipeData",
+                        priority = progress.PRIORITY.LOW,
+                        message = string.format("Wiping data for: %s", choice),
+                    }
+                    local cmd, _ = M.build_emulator_command(emulator, { "-avd", choice, "-wipe-data" })
 
-            if adb then
-                M.get_running_devices(adb, function(running_devices)
-                    local is_running = false
-                    local running_emulator_id = nil
-
-                    for _, device in ipairs(running_devices) do
-                        if device.id:match "^emulator%-" then
-                            -- Try to match by getting AVD name from running emulator
-                            local result =
-                                vim.fn.system { adb, "-s", device.id, "shell", "getprop", "ro.kernel.qemu.avd_name" }
-                            local avd_name = vim.trim(result)
-                            if avd_name == choice then
-                                is_running = true
-                                running_emulator_id = device.id
-                                break
+                    vim.fn.jobstart(cmd, {
+                        on_exit = vim.schedule_wrap(function(_, exit_code)
+                            if exit_code == 0 then
+                                progress.stop_loading(session_id, true, "Emulator data wiped successfully")
+                            else
+                                progress.stop_loading(session_id, false, "Failed to wipe Emulator data")
                             end
-                        end
-                    end
-
-                    M.handle_emulator_wipe_decision(adb, emulator, choice, is_running, running_emulator_id)
-                end)
-            else
-                M.handle_emulator_wipe_decision(adb, emulator, choice, false, nil)
-            end
+                        end),
+                    })
+                else
+                    vim.notify("Wipe data cancelled", vim.log.levels.INFO)
+                end
+            end)
         else
             vim.notify("Wipe data cancelled", vim.log.levels.INFO)
         end
     end)
-end
-
-function M.start_wipe_data(emulator, avd)
-    local session_id = progress.start_loading {
-        command = "DroidEmulatorWipeData",
-        priority = progress.PRIORITY.LOW,
-        message = string.format("Wiping data for: %s", avd),
-    }
-    local cmd, _ = M.build_emulator_command(emulator, { "-avd", avd, "-wipe-data" })
-
-    vim.fn.jobstart(cmd, {
-        on_exit = vim.schedule_wrap(function(_, exit_code)
-            if exit_code == 0 then
-                progress.stop_loading(session_id, true, "Emulator data wiped successfully")
-            else
-                progress.stop_loading(session_id, false, "Failed to wipe Emulator data")
-            end
-        end),
-    })
-end
-
-function M.extract_package_info()
-    -- Find AndroidManifest.xml in the project
-    local manifest_candidates = {
-        "app/src/main/AndroidManifest.xml",
-        "src/main/AndroidManifest.xml",
-        "AndroidManifest.xml",
-    }
-
-    local manifest_path = nil
-    for _, candidate in ipairs(manifest_candidates) do
-        local full_path = vim.fs.find(candidate, { upward = true })[1]
-        if full_path and vim.fn.filereadable(full_path) == 1 then
-            manifest_path = full_path
-            break
-        end
-    end
-
-    if not manifest_path then
-        vim.notify("AndroidManifest.xml not found in project", vim.log.levels.ERROR)
-        return nil
-    end
-
-    -- Read and parse AndroidManifest.xml
-    local manifest_content = table.concat(vim.fn.readfile(manifest_path), "\n")
-
-    -- Extract package name from manifest tag
-    local package_name = manifest_content:match '<manifest[^>]*package="([^"]*)"'
-    if not package_name then
-        vim.notify("Could not extract package name from AndroidManifest.xml", vim.log.levels.ERROR)
-        return nil
-    end
-
-    -- Extract main activity (look for LAUNCHER category)
-    local main_activity = nil
-
-    -- Pattern to find activity with LAUNCHER intent
-    for activity_block in manifest_content:gmatch "<activity[^>]*.-</activity>" do
-        if activity_block:find "android%.intent%.category%.LAUNCHER" then
-            -- Extract activity name
-            main_activity = activity_block:match '<activity[^>]*android:name="([^"]*)"'
-            if main_activity then
-                -- Handle relative activity names (starting with .)
-                if main_activity:sub(1, 1) == "." then
-                    main_activity = package_name .. main_activity
-                elseif not main_activity:find "%." then
-                    -- If no package specified, assume it's in the main package
-                    main_activity = package_name .. "." .. main_activity
-                end
-                break
-            end
-        end
-    end
-
-    if not main_activity then
-        vim.notify("Could not find main activity in AndroidManifest.xml", vim.log.levels.WARN)
-        return { package = package_name }
-    end
-
-    return {
-        package = package_name,
-        activity = main_activity,
-    }
-end
-
-function M.launch_app(adb, device_id, package_info, callback)
-    if not package_info or not package_info.package then
-        vim.notify("No package information available for app launch", vim.log.levels.ERROR)
-        if callback then
-            vim.schedule(callback)
-        end
-        return
-    end
-
-    local launch_cmd
-    if package_info.activity then
-        -- Use am start with specific activity
-        launch_cmd = {
-            adb,
-            "-s",
-            device_id,
-            "shell",
-            "am",
-            "start",
-            "-n",
-            package_info.package .. "/" .. package_info.activity,
-        }
-        vim.notify("Launching " .. package_info.package, vim.log.levels.INFO)
-    else
-        -- Fallback to monkey command with package name only
-        launch_cmd = {
-            adb,
-            "-s",
-            device_id,
-            "shell",
-            "monkey",
-            "-p",
-            package_info.package,
-            "-c",
-            "android.intent.category.LAUNCHER",
-            "1",
-        }
-        vim.notify("Launching " .. package_info.package .. " (fallback method)", vim.log.levels.INFO)
-    end
-
-    vim.fn.jobstart(launch_cmd, {
-        on_exit = vim.schedule_wrap(function(_, exit_code)
-            if exit_code == 0 then
-                vim.notify("App launched successfully", vim.log.levels.INFO)
-            else
-                vim.notify("Failed to launch app (exit code: " .. exit_code .. ")", vim.log.levels.WARN)
-            end
-
-            if callback then
-                vim.schedule(callback)
-            end
-        end),
-        on_stderr = function(_, data)
-            -- Filter out common non-error messages
-            for _, line in ipairs(data) do
-                if line and #line > 0 and not line:match "^%s*$" then
-                    -- Only show stderr if it looks like a real error
-                    if line:lower():find "error" or line:lower():find "failed" then
-                        vim.schedule(function()
-                            vim.notify("App launch warning: " .. line, vim.log.levels.WARN)
-                        end)
-                    end
-                end
-            end
-        end,
-    })
 end
 
 return M
