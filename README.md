@@ -30,7 +30,7 @@ Build, run, and debug Android apps directly from Neovim with real-time logcat fi
 ```lua
 -- lazy.nvim
 {
-  "rizukirr/droid-nvim",
+  "rrxxyz/droid-nvim",
   config = function()
     require("droid").setup()
   end,
@@ -66,42 +66,42 @@ require("droid").setup({
 
 ### Core Commands
 
-| Command            | Description                                           |
-| ------------------ | ----------------------------------------------------- |
+| Command            | Description                                              |
+| ------------------ | -------------------------------------------------------- |
 | `:DroidRun`        | **Complete workflow:** Build → Install → Launch → Logcat |
-| `:DroidBuildDebug` | Build debug APK only                                  |
-| `:DroidLogcat`     | Open logcat viewer (device selection if needed)       |
-| `:DroidLogcatStop` | Stop logcat and close window                          |
+| `:DroidBuildDebug` | Build debug APK only                                     |
+| `:DroidLogcat`     | Open logcat viewer (device selection if needed)          |
+| `:DroidLogcatStop` | Stop logcat and close window                             |
 
 ### Gradle Commands
 
-| Command                | Description                           |
-| ---------------------- | ------------------------------------- |
-| `:DroidClean`          | Clean project (`./gradlew clean`)     |
-| `:DroidSync`           | Sync dependencies (`--refresh-dependencies`) |
-| `:DroidTask <task>`    | Run custom Gradle task with args     |
-| `:DroidInstall`        | Install APK without launching         |
+| Command             | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `:DroidClean`       | Clean project (`./gradlew clean`)            |
+| `:DroidSync`        | Sync dependencies (`--refresh-dependencies`) |
+| `:DroidTask <task>` | Run custom Gradle task with args             |
+| `:DroidInstall`     | Install APK without launching                |
 
 ### Device & Emulator Management
 
-| Command                    | Description                      |
-| -------------------------- | -------------------------------- |
-| `:DroidDevices`            | Show device selection dialog     |
-| `:DroidEmulator`           | Launch emulator (AVD picker)     |
-| `:DroidEmulatorStop`       | Stop running emulator            |
-| `:DroidEmulatorWipeData`   | Wipe emulator data               |
-| `:DroidStartEmulator`      | Start emulator workflow          |
+| Command                  | Description                  |
+| ------------------------ | ---------------------------- |
+| `:DroidDevices`          | Show device selection dialog |
+| `:DroidEmulator`         | Launch emulator (AVD picker) |
+| `:DroidEmulatorStop`     | Stop running emulator        |
+| `:DroidEmulatorWipeData` | Wipe emulator data           |
+| `:DroidStartEmulator`    | Start emulator workflow      |
 
 ### Advanced Logcat Features
 
-| Command                                | Description                                 |
-| -------------------------------------- | ------------------------------------------- |
+| Command                                | Description                                       |
+| -------------------------------------- | ------------------------------------------------- |
 | `:DroidLogcatFilter log_level=<level>` | Filter by log level: `v`, `d`, `i`, `w`, `e`, `f` |
-| `:DroidLogcatFilter tag=<name>`        | Filter by specific tag                      |
-| `:DroidLogcatFilter package=<name>`    | Filter by package (`mine` = auto-detect)   |
-| `:DroidLogcatFilter grep=<pattern>`    | Filter by regex pattern                     |
-| `:DroidLogcatFilterShow`               | Show currently active filters              |
-| `:DroidLogcatToggleAutoScroll`         | Toggle auto-scroll to bottom                |
+| `:DroidLogcatFilter tag=<name>`        | Filter by specific tag                            |
+| `:DroidLogcatFilter package=<name>`    | Filter by package (`mine` = auto-detect)          |
+| `:DroidLogcatFilter grep=<pattern>`    | Filter by regex pattern                           |
+| `:DroidLogcatFilterShow`               | Show currently active filters                     |
+| `:DroidLogcatToggleAutoScroll`         | Toggle auto-scroll to bottom                      |
 
 **Combine filters:** `:DroidLogcatFilter tag=MyTag log_level=d package=mine`
 
@@ -177,6 +177,7 @@ The plugin automatically detects your Android SDK from these locations (in order
    - **Windows**: `%LOCALAPPDATA%/Android/Sdk`, `%PROGRAMFILES%/Android/Android Studio/sdk`
 
 **Manual override:**
+
 ```lua
 vim.g.android_sdk = "/path/to/android-sdk"
 ```
@@ -190,6 +191,7 @@ vim.g.android_sdk = "/path/to/android-sdk"
 ### Linux-Specific Setup
 
 For emulator compatibility on Linux:
+
 ```lua
 require("droid").setup({
   android = {
@@ -202,14 +204,14 @@ require("droid").setup({
 
 ### Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| **"gradlew not found"** | Run `chmod +x gradlew` in project root |
+| Issue                       | Solution                                                     |
+| --------------------------- | ------------------------------------------------------------ |
+| **"gradlew not found"**     | Run `chmod +x gradlew` in project root                       |
 | **"Android SDK not found"** | Set `ANDROID_SDK_ROOT`/`ANDROID_HOME` or `vim.g.android_sdk` |
-| **"No devices available"** | Check `adb devices`, ensure devices/emulators are connected |
-| **"Emulator won't start"** | Set `qt_qpa_platform = "xcb"` in config (Linux) |
-| **"Package not found"** | Ensure `applicationId` is in `android/app/build.gradle` |
-| **Logcat not filtering** | Check filters with `:DroidLogcatFilterShow` |
+| **"No devices available"**  | Check `adb devices`, ensure devices/emulators are connected  |
+| **"Emulator won't start"**  | Set `qt_qpa_platform = "xcb"` in config (Linux)              |
+| **"Package not found"**     | Ensure `applicationId` is in `android/app/build.gradle`      |
+| **Logcat not filtering**    | Check filters with `:DroidLogcatFilterShow`                  |
 
 ### Debugging Commands
 
