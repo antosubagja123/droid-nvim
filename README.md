@@ -10,6 +10,8 @@
 
 Build, run, and debug Android apps directly from Neovim with real-time logcat filtering.
 
+> **⚠️ Note:** This repository is currently under heavy maintenance. Some features may be unstable or subject to breaking changes.
+
 </div>
 
 ## ✨ Features
