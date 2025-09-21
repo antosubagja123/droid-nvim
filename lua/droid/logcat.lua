@@ -378,6 +378,17 @@ function M.stop()
     end
 end
 
+-- Refresh logcat: stop current session and start fresh (for after app installation)
+function M.refresh_logcat(adb, device_id, mode, filters)
+    -- Stop current logcat if running to clear old logs
+    M.stop()
+
+    -- Small delay to ensure clean stop, then start fresh logcat
+    vim.defer_fn(function()
+        M.start(adb, device_id, mode, filters)
+    end, 100)
+end
+
 function M.is_running()
     return M.job_id ~= nil
 end

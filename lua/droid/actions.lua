@@ -86,7 +86,7 @@ function M.build_and_run()
                 local delay_ms = cfg.logcat_startup_delay_ms or 2000
 
                 vim.defer_fn(function()
-                    logcat.apply_filters({}, tools.adb, target.id)
+                    logcat.refresh_logcat(tools.adb, target.id, nil, {})
                     progress.stop_loading(session_id, true, "Run application successful")
                 end, delay_ms)
             end)
@@ -100,7 +100,7 @@ function M.build_and_run()
                         local delay_ms = cfg.logcat_startup_delay_ms or 2000
 
                         vim.defer_fn(function()
-                            logcat.apply_filters({}, tools.adb, device_id)
+                            logcat.refresh_logcat(tools.adb, device_id, nil, {})
                             progress.stop_loading(session_id, true, "Run application successful")
                         end, delay_ms)
                     end)
