@@ -151,8 +151,8 @@ function M.build_emulator_command(emulator, args)
     end
 
     -- If Qt platform is configured, use shell with environment variable
-    if cfg.qt_qpa_platform then
-        local cmd_str = "QT_QPA_PLATFORM=" .. cfg.qt_qpa_platform .. " " .. table.concat(full_args, " ")
+    if cfg.android.qt_qpa_platform then
+        local cmd_str = "QT_QPA_PLATFORM=" .. cfg.android.qt_qpa_platform .. " " .. table.concat(full_args, " ")
         return { "sh", "-c", cmd_str }, cmd_str
     else
         return full_args, table.concat(full_args, " ")
@@ -202,7 +202,7 @@ function M.get_adb_path()
         return nil
     end
 
-    return cfg.adb_path
+    return cfg.android.adb_path
         or vim.fs.joinpath(
             android_sdk,
             "platform-tools",
@@ -217,7 +217,7 @@ function M.get_emulator_path()
         return nil
     end
 
-    return cfg.emulator_path
+    return cfg.android.emulator_path
         or vim.fs.joinpath(
             android_sdk,
             "emulator",
@@ -260,7 +260,7 @@ function M.wait_for_device_id(adb, callback)
     progress.update_spinner_message "Waiting for device to come online"
 
     timer:start(0, 2000, function()
-        if vim.loop.now() - start_time > cfg.device_wait_timeout_ms then
+        if vim.loop.now() - start_time > cfg.android.device_wait_timeout_ms then
             timer:stop()
             timer:close()
             vim.schedule(function()
@@ -278,6 +278,76 @@ function M.wait_for_device_id(adb, callback)
                 callback(devices[1].id)
             end
         end)
+    end)
+end
+
+-- Check if device is fully booted and ready for app installation
+local function is_device_boot_completed(adb, device_id, callback)
+    vim.system({ adb, "-s", device_id, "shell", "getprop", "sys.boot_completed" }, {}, function(obj)
+        local boot_completed = vim.trim(obj.stdout or "")
+        local is_ready = boot_completed == "1"
+
+        if is_ready then
+            -- Additional check: ensure package manager is ready
+            vim.system({ adb, "-s", device_id, "shell", "pm", "list", "packages" }, {}, function(pm_obj)
+                local pm_ready = pm_obj.code == 0
+                vim.schedule(function()
+                    callback(pm_ready)
+                end)
+            end)
+        else
+            vim.schedule(function()
+                callback(false)
+            end)
+        end
+    end)
+end
+
+-- Enhanced device waiting that checks both device online status AND boot completion
+function M.wait_for_device_ready(adb, callback)
+    local cfg = config.get()
+    local timer = vim.loop.new_timer()
+    local start_time = vim.loop.now()
+    local device_found = false
+    local current_device_id = nil
+
+    progress.update_spinner_message "Waiting for device to come online"
+
+    timer:start(0, cfg.android.boot_check_interval_ms or 3000, function()
+        local elapsed = vim.loop.now() - start_time
+        local timeout = cfg.android.boot_complete_timeout_ms or 120000
+
+        if elapsed > timeout then
+            timer:stop()
+            timer:close()
+            vim.schedule(function()
+                progress.stop_spinner()
+                vim.notify("Timed out waiting for device to boot completely", vim.log.levels.ERROR)
+                callback(nil)
+            end)
+            return
+        end
+
+        if not device_found then
+            -- First phase: wait for device to appear in adb devices
+            M.get_running_devices(adb, function(devices)
+                if #devices > 0 then
+                    device_found = true
+                    current_device_id = devices[1].id
+                    progress.update_spinner_message "Device found, waiting for boot completion"
+                end
+            end)
+        else
+            -- Second phase: wait for boot completion
+            is_device_boot_completed(adb, current_device_id, function(is_ready)
+                if is_ready then
+                    timer:stop()
+                    timer:close()
+                    progress.update_spinner_message "Device ready for installation"
+                    callback(current_device_id)
+                end
+            end)
+        end
     end)
 end
 
@@ -312,7 +382,7 @@ function M.choose_target(adb, emulator, callback)
             return
         end
 
-        if #targets == 1 and cfg.auto_select_single_target then
+        if #targets == 1 and cfg.android.auto_select_single_target then
             callback(targets[1])
             return
         end

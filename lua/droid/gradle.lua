@@ -55,7 +55,7 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
             term = true,
             cwd = cwd,
             on_exit = function(_, exit_code)
-                buffer.set_current_job_with_owner(nil, "gradle")
+                buffer.set_current_job(nil)
 
                 -- Show terminal window on completion, auto-focus on failure
                 vim.schedule(function()
@@ -71,7 +71,6 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
                     end
 
                     -- Release buffer lock after job completion
-                    buffer.release_lock "gradle"
 
                     -- Run callback
                     if callback then
@@ -80,7 +79,7 @@ local function run_gradle_task(cwd, gradlew, task, args, callback)
                 end)
             end,
         })
-        buffer.set_current_job_with_owner(job_id, "gradle")
+        buffer.set_current_job(job_id)
     end)
 end
 
@@ -290,7 +289,7 @@ function M.install_debug(callback)
     local job_id = vim.fn.jobstart({ g.gradlew, "installDebug" }, {
         cwd = g.cwd,
         on_exit = function(_, code)
-            buffer.set_current_job_with_owner(nil, "gradle")
+            buffer.set_current_job(nil)
             progress.stop_spinner()
 
             local success = code == 0
@@ -305,7 +304,6 @@ function M.install_debug(callback)
             end
 
             -- Release buffer lock
-            buffer.release_lock "gradle"
 
             if callback then
                 vim.schedule(function()
@@ -315,7 +313,7 @@ function M.install_debug(callback)
         end,
     })
 
-    buffer.set_current_job_with_owner(job_id, "gradle")
+    buffer.set_current_job(job_id)
 end
 
 -- Sequential build and install function for enhanced DroidRun workflow
@@ -369,7 +367,7 @@ function M.build_and_install_debug(callback)
         local job_id = vim.fn.jobstart({ g.gradlew, "installDebug" }, {
             cwd = g.cwd,
             on_exit = function(_, install_code)
-                buffer.set_current_job_with_owner(nil, "gradle")
+                buffer.set_current_job(nil)
                 progress.stop_spinner()
 
                 local install_success = install_code == 0
@@ -384,7 +382,6 @@ function M.build_and_install_debug(callback)
                 end
 
                 -- Release buffer lock
-                buffer.release_lock "gradle"
 
                 if callback then
                     vim.schedule(function()
@@ -394,7 +391,7 @@ function M.build_and_install_debug(callback)
             end,
         })
 
-        buffer.set_current_job_with_owner(job_id, "gradle")
+        buffer.set_current_job(job_id)
     end)
 end
 
@@ -426,9 +423,8 @@ end
 
 function M.stop()
     local buf_info = buffer.get_buffer_info()
-    if buf_info.job_id and (buf_info.job_owner == "gradle" or buf_info.type == "gradle") then
-        buffer.stop_current_job_with_owner "gradle"
-        buffer.release_lock "gradle"
+    if buf_info.job_id and buf_info.type == "gradle" then
+        buffer.stop_current_job()
         vim.notify("Gradle task stopped", vim.log.levels.INFO)
     else
         vim.notify("No active Gradle task", vim.log.levels.WARN)
@@ -440,9 +436,8 @@ vim.api.nvim_create_autocmd("VimLeave", {
     callback = function()
         -- Force stop any gradle jobs and release ownership
         local buf_info = buffer.get_buffer_info()
-        if buf_info.job_owner == "gradle" then
-            buffer.stop_current_job_with_owner "gradle"
-            buffer.release_lock "gradle"
+        if buf_info.type == "gradle" then
+            buffer.stop_current_job()
         end
     end,
 })

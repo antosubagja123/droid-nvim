@@ -22,6 +22,8 @@ local defaults = {
         emulator_path = nil,
         qt_qpa_platform = nil,
         device_wait_timeout_ms = 120000,
+        boot_complete_timeout_ms = 120000,
+        boot_check_interval_ms = 3000,
         logcat_startup_delay_ms = 2000,
     },
 }
@@ -75,6 +77,8 @@ local function migrate_legacy_config(opts)
         "emulator_path",
         "qt_qpa_platform",
         "device_wait_timeout_ms",
+        "boot_complete_timeout_ms",
+        "boot_check_interval_ms",
         "logcat_startup_delay_ms",
     }
 

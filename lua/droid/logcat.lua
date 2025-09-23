@@ -124,7 +124,7 @@ function M.apply_filters(user_filters, adb, device_id)
     if M.job_id and M.current_adb and M.current_device_id then
         -- Calculate what the new filters would be (same logic as in M.start)
         local cfg = config.get()
-        local base_filters = cfg.logcat_filters or {}
+        local base_filters = cfg.logcat.filters or {}
         local new_filters = {}
 
         -- Start with user's config as base
@@ -204,7 +204,7 @@ end
 --   override_filters: optional filters to override config (temporary)
 function M.start(adb, device_id, mode, override_filters)
     local cfg = config.get()
-    local base_filters = cfg.logcat_filters or {}
+    local base_filters = cfg.logcat.filters or {}
     local active_filters = {}
 
     -- Start with user's config as base
@@ -221,12 +221,7 @@ function M.start(adb, device_id, mode, override_filters)
 
     -- Enhanced reuse logic with ownership checking
     local buf_info = buffer.get_buffer_info()
-    if
-        buf_info.job_id
-        and M.current_adb == adb
-        and M.current_device_id == device_id
-        and (buf_info.job_owner == "logcat" or buf_info.type == "logcat")
-    then
+    if buf_info.job_id and M.current_adb == adb and M.current_device_id == device_id and buf_info.type == "logcat" then
         -- Same device and logcat is running
 
         if not override_filters or (type(override_filters) == "table" and next(override_filters) == nil) then
@@ -260,7 +255,7 @@ function M.start(adb, device_id, mode, override_filters)
 
     -- Handle existing logcat session with ownership validation
     if buf_info.job_id then
-        buffer.stop_current_job_with_owner "logcat"
+        buffer.stop_current_job()
         vim.notify("Applying filters...", vim.log.levels.INFO)
     end
 
@@ -310,17 +305,16 @@ function M.start(adb, device_id, mode, override_filters)
                 end
             end,
             on_exit = function(_, _, _)
-                buffer.set_current_job_with_owner(nil, "logcat")
+                buffer.set_current_job(nil)
                 M.current_device_id = nil
                 M.current_adb = nil
                 -- Release buffer lock when logcat exits
-                buffer.release_lock "logcat"
                 vim.notify("Logcat process exited", vim.log.levels.INFO)
             end,
         }
 
         local job_id = vim.fn.jobstart(cmd, job_opts)
-        buffer.set_current_job_with_owner(job_id, "logcat")
+        buffer.set_current_job(job_id)
     end)
 end
 
@@ -331,9 +325,8 @@ end
 
 function M.stop()
     local buf_info = buffer.get_buffer_info()
-    if buf_info.job_id and (buf_info.job_owner == "logcat" or buf_info.type == "logcat") then
-        buffer.stop_current_job_with_owner "logcat"
-        buffer.release_lock "logcat"
+    if buf_info.job_id and buf_info.type == "logcat" then
+        buffer.stop_current_job()
         M.current_device_id = nil
         M.current_adb = nil
         vim.notify("Logcat stopped", vim.log.levels.INFO)
@@ -357,7 +350,7 @@ end
 
 function M.is_running()
     local buf_info = buffer.get_buffer_info()
-    return buf_info.job_id ~= nil and (buf_info.job_owner == "logcat" or buf_info.type == "logcat")
+    return buf_info.job_id ~= nil and buf_info.type == "logcat"
 end
 
 function M.toggle_auto_scroll()

@@ -16,7 +16,7 @@ local function handle_post_install(tools, device_id, session_id, launch_app)
     local function start_logcat()
         local delay_ms = cfg.android.logcat_startup_delay_ms or 2000
         vim.defer_fn(function()
-            logcat.refresh_logcat(tools.adb, device_id, nil, {})
+            logcat.refresh_logcat(tools.adb, device_id, nil, nil)
             local message = launch_app and "Build, install, and launch completed" or "Build and install completed"
             progress.stop_loading(session_id, true, message)
         end, delay_ms)
@@ -89,9 +89,9 @@ function M.build_and_run()
             execute_build_install(tools, target.id, session_id, true)
         elseif target.type == "avd" then
             android.start_emulator(tools.emulator, target.avd)
-            android.wait_for_device_id(tools.adb, function(device_id)
+            android.wait_for_device_ready(tools.adb, function(device_id)
                 if not device_id then
-                    progress.stop_loading(session_id, false, "Failed to start emulator")
+                    progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
                     return
                 end
                 execute_build_install(tools, device_id, session_id, true)
@@ -127,9 +127,9 @@ function M.install_only()
             execute_build_install(tools, target.id, session_id, false)
         elseif target.type == "avd" then
             android.start_emulator(tools.emulator, target.avd)
-            android.wait_for_device_id(tools.adb, function(device_id)
+            android.wait_for_device_ready(tools.adb, function(device_id)
                 if not device_id then
-                    progress.stop_loading(session_id, false, "Failed to start emulator")
+                    progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
                     return
                 end
                 execute_build_install(tools, device_id, session_id, false)
