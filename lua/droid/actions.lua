@@ -1,5 +1,5 @@
 -- High-level workflow actions for droid.nvim
--- This module provides reusable, independent functions for common Android development tasks
+-- Simplified, reusable functions for common Android development tasks
 
 local config = require "droid.config"
 local gradle = require "droid.gradle"
@@ -9,54 +9,61 @@ local progress = require "droid.progress"
 
 local M = {}
 
--- Validates and gets required tools (adb, emulator)
--- Returns: { adb = path, emulator = path } or nil if validation fails
+-- Helper function to handle common post-install workflow
+local function handle_post_install(tools, device_id, session_id, launch_app)
+    local cfg = config.get()
+
+    local function start_logcat()
+        local delay_ms = cfg.android.logcat_startup_delay_ms or 2000
+        vim.defer_fn(function()
+            logcat.refresh_logcat(tools.adb, device_id, nil, nil)
+            local message = launch_app and "Build, install, and launch completed" or "Build and install completed"
+            progress.stop_loading(session_id, true, message)
+        end, delay_ms)
+    end
+
+    if launch_app and cfg.android.auto_launch_app then
+        android.launch_app_on_device(tools.adb, device_id, start_logcat)
+    else
+        start_logcat()
+    end
+end
+
+-- Helper function to execute build and install workflow
+local function execute_build_install(tools, device_id, session_id, launch_app)
+    gradle.build_and_install_debug(function(success, exit_code, message, step)
+        if not success then
+            local error_msg = string.format("Workflow failed at %s step: %s", step, message)
+            progress.stop_loading(session_id, false, error_msg)
+            return
+        end
+
+        handle_post_install(tools, device_id, session_id, launch_app)
+    end)
+end
+
+-- Get required Android tools or show error
 function M.get_required_tools()
     local adb = android.get_adb_path()
     local emulator = android.get_emulator_path()
 
     if not adb or not emulator then
+        vim.notify("Android SDK tools not found. Check ANDROID_SDK_ROOT.", vim.log.levels.ERROR)
         return nil
     end
 
     return { adb = adb, emulator = emulator }
 end
 
--- Executes target selection workflow
--- Args: tools (from get_required_tools), callback(target)
--- Target: { type = "device"|"avd", id = device_id, name = display_name, avd = avd_name }
+-- Select target device or emulator
 function M.select_target(tools, callback)
     if not tools then
-        vim.notify("Android tools not available", vim.log.levels.ERROR)
         return
     end
-
     android.choose_target(tools.adb, tools.emulator, callback)
 end
 
--- Builds debug APK only
--- Args: callback() - called after build completes
-function M.build_debug(callback)
-    gradle.build_debug()
-    if callback then
-        vim.schedule(callback)
-    end
-end
-
--- Installs debug APK only (no launch)
--- Args: adb, device_id, callback() - called after install completes
-function M.install_debug(callback)
-    gradle.install_debug(callback)
-end
-
--- Installs and launches debug APK
--- Args: adb, device_id, callback() - called after launch completes
-function M.install_and_launch(adb, device_id, callback)
-    gradle.install_debug_and_launch(adb, device_id, callback)
-end
-
--- Complete build and run workflow (the core DroidRun functionality)
--- This is the main workflow: select target -> install+launch -> logcat
+-- Complete build and run workflow (core DroidRun functionality)
 function M.build_and_run()
     local tools = M.get_required_tools()
     if not tools then
@@ -68,45 +75,26 @@ function M.build_and_run()
             return
         end
 
-        -- Start loading after device selection
         local session_id = progress.start_loading {
             command = "DroidRun",
             priority = progress.PRIORITY.CRITICAL,
-            message = "Running build and install application",
+            message = "Building and installing application",
         }
 
         if not session_id then
-            return -- Loading was queued or cancelled
+            return
         end
 
         if target.type == "device" then
-            M.install_and_launch(tools.adb, target.id, function()
-                -- Add delay before starting logcat to let app fully start
-                local cfg = config.get()
-                local delay_ms = cfg.logcat_startup_delay_ms or 2000
-
-                vim.defer_fn(function()
-                    logcat.refresh_logcat(tools.adb, target.id, nil, {})
-                    progress.stop_loading(session_id, true, "Run application successful")
-                end, delay_ms)
-            end)
+            execute_build_install(tools, target.id, session_id, true)
         elseif target.type == "avd" then
             android.start_emulator(tools.emulator, target.avd)
-            android.wait_for_device_id(tools.adb, function(device_id)
-                if device_id then
-                    M.install_and_launch(tools.adb, device_id, function()
-                        -- Add delay before starting logcat to let app fully start
-                        local cfg = config.get()
-                        local delay_ms = cfg.logcat_startup_delay_ms or 2000
-
-                        vim.defer_fn(function()
-                            logcat.refresh_logcat(tools.adb, device_id, nil, {})
-                            progress.stop_loading(session_id, true, "Run application successful")
-                        end, delay_ms)
-                    end)
-                else
+            android.wait_for_device_ready(tools.adb, function(device_id)
+                if not device_id then
                     progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
+                    return
                 end
+                execute_build_install(tools, device_id, session_id, true)
             end)
         end
     end)
@@ -119,15 +107,14 @@ function M.install_only()
         return
     end
 
-    -- Start loading with global management
     local session_id = progress.start_loading {
         command = "DroidInstall",
         priority = progress.PRIORITY.CRITICAL,
-        message = "Selecting target device",
+        message = "Installing application",
     }
 
     if not session_id then
-        return -- Loading was queued or cancelled
+        return
     end
 
     M.select_target(tools, function(target)
@@ -137,39 +124,36 @@ function M.install_only()
         end
 
         if target.type == "device" then
-            progress.update_spinner_message("Installing on " .. target.name)
-            M.install_debug(function()
-                progress.stop_loading(session_id, true, "Installation completed")
-            end)
+            execute_build_install(tools, target.id, session_id, false)
         elseif target.type == "avd" then
-            progress.update_spinner_message "Starting emulator"
             android.start_emulator(tools.emulator, target.avd)
-            android.wait_for_device_id(tools.adb, function(device_id)
-                if device_id then
-                    progress.update_spinner_message "Installing on emulator"
-                    M.install_debug(function()
-                        progress.stop_loading(session_id, true, "Installation completed")
-                    end)
-                else
+            android.wait_for_device_ready(tools.adb, function(device_id)
+                if not device_id then
                     progress.stop_loading(session_id, false, "Failed to start emulator or device not ready")
+                    return
                 end
+                execute_build_install(tools, device_id, session_id, false)
             end)
         end
     end)
 end
 
--- Logcat-only workflow
+-- Install and launch workflow (for backward compatibility)
+function M.install_and_launch()
+    M.build_and_run()
+end
+
+-- Show logcat for selected device
 function M.logcat_only()
     local tools = M.get_required_tools()
     if not tools then
         return
     end
 
-    -- Directly use logcat's device selection (which now only shows running devices)
     logcat.apply_filters {}
 end
 
--- Device selection workflow (just shows selected device)
+-- Show device selection dialog
 function M.show_devices()
     local tools = M.get_required_tools()
     if not tools then
@@ -177,15 +161,18 @@ function M.show_devices()
     end
 
     M.select_target(tools, function(target)
-        if target.type == "device" then
-            vim.notify("Selected device: " .. target.name .. " (" .. target.id .. ")", vim.log.levels.INFO)
-        elseif target.type == "avd" then
-            vim.notify("Selected AVD: " .. target.name .. " (" .. target.avd .. ")", vim.log.levels.INFO)
+        if not target then
+            return
         end
+
+        local msg = target.type == "device" and string.format("Selected device: %s (%s)", target.name, target.id)
+            or string.format("Selected AVD: %s (%s)", target.name, target.avd)
+
+        vim.notify(msg, vim.log.levels.INFO)
     end)
 end
 
--- Start emulator workflow
+-- Start emulator from AVD list
 function M.start_emulator()
     local tools = M.get_required_tools()
     if not tools then
@@ -193,6 +180,10 @@ function M.start_emulator()
     end
 
     M.select_target(tools, function(target)
+        if not target then
+            return
+        end
+
         if target.type == "avd" then
             android.start_emulator(tools.emulator, target.avd)
         else

@@ -1,66 +1,13 @@
 local config = require "droid.config"
 local android = require "droid.android"
+local buffer = require "droid.buffer"
 
 local M = {}
 
-M.job_id = nil
-M.buf = nil
-M.win = nil
 M.auto_scroll = true
 M.current_filters = nil
 M.current_device_id = nil
 M.current_adb = nil
-
-local function create_logcat_buffer()
-    if M.buf and vim.api.nvim_buf_is_valid(M.buf) then
-        vim.api.nvim_buf_delete(M.buf, { force = true })
-    end
-    M.buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[M.buf].filetype = "logcat"
-    return M.buf
-end
-
-local function attach_cleanup()
-    vim.api.nvim_create_autocmd("BufWipeout", {
-        buffer = M.buf,
-        callback = function()
-            if M.job_id then
-                vim.fn.jobstop(M.job_id)
-                M.job_id = nil
-                vim.notify("Logcat stopped (buffer closed)", vim.log.levels.INFO)
-            end
-        end,
-    })
-end
-
-local function open_window(mode)
-    local cfg = config.get()
-    mode = mode or cfg.logcat_mode
-
-    -- Open window according to mode
-    if mode == "horizontal" then
-        vim.cmd("botright split | resize " .. cfg.logcat_height)
-        M.win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(M.win, M.buf)
-    elseif mode == "vertical" then
-        vim.cmd("vsplit | vertical resize " .. cfg.logcat_width)
-        M.win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(M.win, M.buf)
-    elseif mode == "float" then
-        local opts = {
-            relative = "editor",
-            width = cfg.logcat_width,
-            height = cfg.logcat_height,
-            col = math.floor((vim.o.columns - cfg.logcat_width) / 2),
-            row = math.floor((vim.o.lines - cfg.logcat_height) / 2),
-            style = "minimal",
-            border = "rounded",
-            title = "Logcat",
-            title_pos = "center",
-        }
-        M.win = vim.api.nvim_open_win(M.buf, true, opts)
-    end
-end
 
 local function build_logcat_command(adb, device_id, filters, callback)
     local cmd = { adb, "-s", device_id, "logcat" }
@@ -177,7 +124,7 @@ function M.apply_filters(user_filters, adb, device_id)
     if M.job_id and M.current_adb and M.current_device_id then
         -- Calculate what the new filters would be (same logic as in M.start)
         local cfg = config.get()
-        local base_filters = cfg.logcat_filters or {}
+        local base_filters = cfg.logcat.filters or {}
         local new_filters = {}
 
         -- Start with user's config as base
@@ -195,6 +142,11 @@ function M.apply_filters(user_filters, adb, device_id)
         -- Check if filters would actually change the logcat command
         if filters_equivalent(M.current_filters, new_filters) then
             vim.notify("Filters unchanged, logcat continues running", vim.log.levels.INFO)
+            -- Ensure window is visible with ownership
+            local buf_info = buffer.get_buffer_info()
+            if buf_info.buffer_id and not buffer.is_valid() then
+                buffer.get_or_create("logcat", nil, "logcat")
+            end
             return
         end
 
@@ -252,7 +204,7 @@ end
 --   override_filters: optional filters to override config (temporary)
 function M.start(adb, device_id, mode, override_filters)
     local cfg = config.get()
-    local base_filters = cfg.logcat_filters or {}
+    local base_filters = cfg.logcat.filters or {}
     local active_filters = {}
 
     -- Start with user's config as base
@@ -267,17 +219,18 @@ function M.start(adb, device_id, mode, override_filters)
         end
     end
 
-    -- Smart reuse logic: check if we can reuse existing logcat session
-    if M.job_id and M.current_adb == adb and M.current_device_id == device_id then
+    -- Enhanced reuse logic with ownership checking
+    local buf_info = buffer.get_buffer_info()
+    if buf_info.job_id and M.current_adb == adb and M.current_device_id == device_id and buf_info.type == "logcat" then
         -- Same device and logcat is running
 
         if not override_filters or (type(override_filters) == "table" and next(override_filters) == nil) then
             -- No filter override or empty table (DroidRun, DroidLogcat case) - always reuse
             vim.notify("Reusing existing logcat session", vim.log.levels.INFO)
 
-            -- Reopen window if it was closed
-            if not M.win or not vim.api.nvim_win_is_valid(M.win) then
-                open_window(mode)
+            -- Ensure window is visible with ownership
+            if not buffer.is_valid() then
+                buffer.get_or_create("logcat", mode, "logcat")
             end
             return
         else
@@ -285,9 +238,9 @@ function M.start(adb, device_id, mode, override_filters)
             if filters_equivalent(M.current_filters, active_filters) then
                 vim.notify("Logcat filters unchanged, reusing session", vim.log.levels.INFO)
 
-                -- Reopen window if it was closed
-                if not M.win or not vim.api.nvim_win_is_valid(M.win) then
-                    open_window(mode)
+                -- Ensure window is visible with ownership
+                if not buffer.is_valid() then
+                    buffer.get_or_create("logcat", mode, "logcat")
                 end
                 return
             else
@@ -300,24 +253,19 @@ function M.start(adb, device_id, mode, override_filters)
     M.current_device_id = device_id
     M.current_adb = adb
 
-    -- Handle existing logcat session
-    if M.job_id then
-        vim.fn.jobstop(M.job_id)
-        M.job_id = nil
-
-        -- If we're restarting with existing buffer, clear it but don't recreate
-        if M.buf and vim.api.nvim_buf_is_valid(M.buf) then
-            vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, {})
-            vim.notify("Applying filters...", vim.log.levels.INFO)
-        end
+    -- Handle existing logcat session with ownership validation
+    if buf_info.job_id then
+        buffer.stop_current_job()
+        vim.notify("Applying filters...", vim.log.levels.INFO)
     end
 
-    -- Create buffer and window only if they don't exist
-    if not M.buf or not vim.api.nvim_buf_is_valid(M.buf) then
-        create_logcat_buffer()
-    end
-    if not M.win or not vim.api.nvim_win_is_valid(M.win) then
-        open_window(mode)
+    -- Get or create centralized buffer with logcat ownership
+    local buf, win = buffer.get_or_create("logcat", mode, "logcat")
+
+    if not buf then
+        -- Buffer is busy with another operation
+        vim.notify("Buffer is busy. Logcat request queued.", vim.log.levels.WARN)
+        return
     end
 
     build_logcat_command(adb, device_id, active_filters, function(cmd)
@@ -338,24 +286,35 @@ function M.start(adb, device_id, mode, override_filters)
                     end
 
                     if #filtered_data > 0 then
-                        vim.api.nvim_buf_set_lines(M.buf, -1, -1, false, filtered_data)
-                        if M.auto_scroll and M.win and vim.api.nvim_win_is_valid(M.win) then
-                            local line_count = vim.api.nvim_buf_line_count(M.buf)
-                            vim.api.nvim_win_set_cursor(M.win, { line_count, 0 })
+                        local buf_info = buffer.get_buffer_info()
+                        if buf_info.buffer_id and vim.api.nvim_buf_is_valid(buf_info.buffer_id) then
+                            -- Temporarily make buffer modifiable for writing
+                            local was_modifiable = vim.bo[buf_info.buffer_id].modifiable
+                            vim.bo[buf_info.buffer_id].modifiable = true
+
+                            vim.api.nvim_buf_set_lines(buf_info.buffer_id, -1, -1, false, filtered_data)
+
+                            -- Restore original modifiable state
+                            vim.bo[buf_info.buffer_id].modifiable = was_modifiable
+
+                            if M.auto_scroll and buffer.is_valid() then
+                                buffer.scroll_to_bottom()
+                            end
                         end
                     end
                 end
             end,
             on_exit = function(_, _, _)
-                M.job_id = nil
+                buffer.set_current_job(nil)
                 M.current_device_id = nil
                 M.current_adb = nil
+                -- Release buffer lock when logcat exits
                 vim.notify("Logcat process exited", vim.log.levels.INFO)
             end,
         }
 
-        M.job_id = vim.fn.jobstart(cmd, job_opts)
-        attach_cleanup()
+        local job_id = vim.fn.jobstart(cmd, job_opts)
+        buffer.set_current_job(job_id)
     end)
 end
 
@@ -365,9 +324,9 @@ function M.open(adb, device_id, mode)
 end
 
 function M.stop()
-    if M.job_id then
-        vim.fn.jobstop(M.job_id)
-        M.job_id = nil
+    local buf_info = buffer.get_buffer_info()
+    if buf_info.job_id and buf_info.type == "logcat" then
+        buffer.stop_current_job()
         M.current_device_id = nil
         M.current_adb = nil
         vim.notify("Logcat stopped", vim.log.levels.INFO)
@@ -390,7 +349,8 @@ function M.refresh_logcat(adb, device_id, mode, filters)
 end
 
 function M.is_running()
-    return M.job_id ~= nil
+    local buf_info = buffer.get_buffer_info()
+    return buf_info.job_id ~= nil and buf_info.type == "logcat"
 end
 
 function M.toggle_auto_scroll()
@@ -451,10 +411,7 @@ end
 -- Clean up on Vim exit
 vim.api.nvim_create_autocmd("VimLeave", {
     callback = function()
-        if M.job_id then
-            vim.fn.jobstop(M.job_id)
-            M.job_id = nil
-        end
+        buffer.close()
     end,
 })
 
